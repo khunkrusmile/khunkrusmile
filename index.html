@@ -1,0 +1,2558 @@
+﻿<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ผจญภัยดินแดนสมการเชิงเส้นตัวแปรเดียว</title>
+    <!-- โหลดฟอนต์ภาษาไทย Kanit จาก Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- โหลด Three.js r128 ผ่าน CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        /* =========================================
+           ตัวแปรสีและสไตล์พื้นฐาน (Design Tokens)
+        ========================================= */
+        :root {
+            --primary: #b45309;
+            --primary-dark: #78350f;
+            --accent: #f59e0b;
+            --accent-dark: #d97706;
+            --success: #10b981;
+            --success-dark: #059669;
+            --danger: #ef4444;
+            --danger-dark: #b91c1c;
+            --parchment: #fffbeb;
+            --parchment-border: #fde68a;
+            --glass-bg: rgba(255, 251, 235, 0.95);
+            --glass-dark: rgba(30, 27, 22, 0.84);
+            --text-main: #292524;
+            --text-muted: #57534e;
+            --radius-lg: 22px;
+            --radius-md: 14px;
+            --shadow-soft: 0 14px 38px rgba(41, 37, 36, 0.28);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Kanit', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: linear-gradient(180deg, #60a5fa 0%, #bae6fd 100%);
+            color: var(--text-main);
+            user-select: none;
+        }
+
+        /* =========================================
+           พื้นที่แสดงผลฉาก 3D (Canvas)
+        ========================================= */
+        #game-canvas-container {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            cursor: grab;
+            touch-action: none;
+        }
+
+        #game-canvas-container:active {
+            cursor: grabbing;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* =========================================
+           ปุ่มสไตล์เกมผจญภัย (3D Pressable Buttons)
+        ========================================= */
+        .game-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 16px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.15s ease;
+            color: #ffffff;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            outline: none;
+        }
+
+        .game-btn:hover {
+            filter: brightness(1.06);
+            transform: translateY(-2px);
+        }
+
+        .game-btn:active {
+            transform: translateY(3px);
+        }
+
+        .btn-gold {
+            background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+            box-shadow: 0 5px 0 #b45309, 0 10px 20px rgba(245, 158, 11, 0.35);
+        }
+        .btn-gold:active {
+            box-shadow: 0 2px 0 #b45309;
+        }
+
+        .btn-blue {
+            background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+            box-shadow: 0 5px 0 #1e40af, 0 10px 20px rgba(37, 99, 235, 0.35);
+        }
+        .btn-blue:active {
+            box-shadow: 0 2px 0 #1e40af;
+        }
+
+        .btn-green {
+            background: linear-gradient(180deg, #34d399 0%, #059669 100%);
+            box-shadow: 0 5px 0 #065f46, 0 10px 20px rgba(16, 185, 129, 0.35);
+        }
+        .btn-green:active {
+            box-shadow: 0 2px 0 #065f46;
+        }
+
+        .btn-slate {
+            background: linear-gradient(180deg, #64748b 0%, #334155 100%);
+            box-shadow: 0 4px 0 #1e293b;
+        }
+        .btn-slate:active {
+            box-shadow: 0 1px 0 #1e293b;
+        }
+
+        /* =========================================
+           Overlay Screens (Start & Result)
+        ========================================= */
+        .overlay-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 30;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(6px);
+            overflow-y: auto;
+            transition: opacity 0.35s ease, visibility 0.35s ease;
+        }
+
+        .overlay-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .card-panel {
+            background: var(--glass-bg);
+            border: 3px solid #f59e0b;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-soft), inset 0 0 24px rgba(245, 158, 11, 0.14);
+            width: 100%;
+            max-width: 580px;
+            padding: 28px 26px;
+            text-align: center;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            margin: auto;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.9) translateY(20px); opacity: 0; }
+            100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+
+        .game-badge {
+            display: inline-block;
+            background: linear-gradient(90deg, #fef3c7, #fde68a);
+            color: #92400e;
+            font-weight: 600;
+            font-size: 0.85rem;
+            padding: 5px 14px;
+            border-radius: 999px;
+            border: 1px solid #f59e0b;
+            margin-bottom: 10px;
+        }
+
+        .game-title {
+            font-size: clamp(1.42rem, 3.8vw, 1.95rem);
+            font-weight: 700;
+            line-height: 1.3;
+            background: linear-gradient(135deg, #78350f 0%, #d97706 52%, #b45309 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+
+        .game-subtitle {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            margin-bottom: 18px;
+        }
+
+        .info-pills {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .info-pill {
+            background: #f8fafc;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 10px 8px;
+        }
+
+        .info-pill .pill-icon {
+            font-size: 1.35rem;
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .info-pill .pill-val {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #0f172a;
+        }
+
+        .info-pill .pill-lbl {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        .form-group {
+            text-align: left;
+            margin-bottom: 14px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.92rem;
+            font-weight: 500;
+            color: #334155;
+            margin-bottom: 5px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #cbd5e1;
+            border-radius: 12px;
+            font-size: 1rem;
+            background: #ffffff;
+            color: #0f172a;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+
+        .form-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+        }
+
+        .inline-error {
+            color: var(--danger);
+            font-size: 0.88rem;
+            margin-bottom: 12px;
+            min-height: 20px;
+            font-weight: 500;
+        }
+
+        /* =========================================
+           HUD (แถบข้อมูลขณะเล่น)
+        ========================================= */
+        #hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 15;
+            padding: 12px 16px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        #hud.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .hud-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            pointer-events: auto;
+        }
+
+        .hud-pill {
+            background: var(--glass-dark);
+            color: #fef3c7;
+            backdrop-filter: blur(8px);
+            border: 1.5px solid rgba(251, 191, 36, 0.45);
+            border-radius: 999px;
+            padding: 7px 14px;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+        }
+
+        .hud-title-pill {
+            background: linear-gradient(135deg, rgba(180, 83, 9, 0.92), rgba(120, 53, 15, 0.92));
+            border-color: #fbbf24;
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .q-close-view {
+            background: #f1f5f9;
+            color: #475569;
+            border: none;
+            border-radius: 10px;
+            padding: 6px 12px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .q-close-view:hover {
+            background: #e2e8f0;
+        }
+
+        .q-text {
+            font-size: 1.08rem;
+            line-height: 1.6;
+            color: #0f172a;
+            margin-bottom: 14px;
+            font-weight: 500;
+        }
+
+        /* กล่องภาพประกอบ SVG */
+        .svg-box {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 14px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: auto;
+        }
+
+        .svg-box svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ปุ่มขอคำใบ้และกล่องคำใบ้ */
+        .hint-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .btn-hint {
+            background: #fef3c7;
+            color: #b45309;
+            border: 1.5px solid #f59e0b;
+            border-radius: 12px;
+            padding: 7px 14px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: background 0.15s, transform 0.1s;
+        }
+
+        .btn-hint:hover {
+            background: #fde68a;
+            transform: translateY(-1px);
+        }
+
+        .hint-box {
+            background: #fffbeb;
+            border-left: 4px solid #f59e0b;
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-bottom: 14px;
+            font-size: 0.94rem;
+            color: #92400e;
+            display: none;
+            animation: fadeIn 0.25s ease;
+        }
+
+        .hint-box.show {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ตัวเลือก 4 ข้อ */
+        .choices-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .choice-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 15px;
+            background: #f8fafc;
+            border: 2px solid #cbd5e1;
+            border-radius: 14px;
+            font-size: 1rem;
+            font-weight: 500;
+            color: #1e293b;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.15s ease;
+        }
+
+        .choice-btn:hover:not(:disabled) {
+            background: #eff6ff;
+            border-color: #3b82f6;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+        }
+
+        .choice-btn:disabled {
+            cursor: default;
+        }
+
+        .choice-prefix {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #e2e8f0;
+            color: #334155;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.92rem;
+            flex-shrink: 0;
+        }
+
+        .choice-btn.correct {
+            background: #ecfdf5;
+            border-color: #10b981;
+            color: #065f46;
+        }
+
+        .choice-btn.correct .choice-prefix {
+            background: #10b981;
+            color: #ffffff;
+        }
+
+        .choice-btn.wrong {
+            background: #fef2f2;
+            border-color: #ef4444;
+            color: #991b1b;
+        }
+
+        .choice-btn.wrong .choice-prefix {
+            background: #ef4444;
+            color: #ffffff;
+        }
+
+        /* กล่องเฉลยและวิธีคิด */
+        .feedback-box {
+            border-radius: 14px;
+            padding: 14px 16px;
+            margin-bottom: 14px;
+            display: none;
+            animation: fadeIn 0.25s ease;
+        }
+
+        .feedback-box.show {
+            display: block;
+        }
+
+        .feedback-box.is-correct {
+            background: #ecfdf5;
+            border: 2px solid #34d399;
+            color: #065f46;
+        }
+
+        .feedback-box.is-wrong {
+            background: #fef2f2;
+            border: 2px solid #f87171;
+            color: #991b1b;
+        }
+
+        .feedback-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .feedback-exp {
+            font-size: 0.94rem;
+            line-height: 1.55;
+        }
+
+        .q-footer {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        /* =========================================
+           หน้าสรุปผลการผจญภัย (Result Screen)
+        ========================================= */
+        .result-card {
+            max-width: 760px;
+            max-height: 92vh;
+            overflow-y: auto;
+            text-align: center;
+        }
+
+        .result-hero-badge {
+            display: inline-block;
+            padding: 6px 18px;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 1rem;
+            margin-bottom: 10px;
+        }
+
+        .status-pass {
+            background: #d1fae5;
+            color: #065f46;
+            border: 2px solid #10b981;
+        }
+
+        .status-retry {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 2px solid #ef4444;
+        }
+
+        .result-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 16px 0;
+        }
+
+        .stat-box {
+            background: #f8fafc;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 12px 8px;
+        }
+
+        .stat-box .stat-num {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #1d4ed8;
+        }
+
+        .stat-box .stat-lbl {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .summary-table-wrap {
+            overflow-x: auto;
+            margin: 16px 0 20px;
+            border-radius: 14px;
+            border: 1.5px solid #e2e8f0;
+        }
+
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+            text-align: left;
+        }
+
+        .summary-table th {
+            background: #f1f5f9;
+            color: #334155;
+            padding: 10px 12px;
+            font-weight: 600;
+        }
+
+        .summary-table td {
+            padding: 9px 12px;
+            border-top: 1px solid #e2e8f0;
+            color: #1e293b;
+        }
+
+        .tag-ok {
+            background: #d1fae5;
+            color: #065f46;
+            padding: 2px 9px;
+            border-radius: 999px;
+            font-weight: 600;
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }
+
+        .tag-no {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 2px 9px;
+            border-radius: 999px;
+            font-weight: 600;
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }
+
+        .result-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        /* =========================================
+           Toast แจ้งเตือนสั้น ๆ (แทน alert)
+        ========================================= */
+        #toast {
+            position: fixed;
+            top: 76px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            z-index: 40;
+            background: rgba(15, 23, 42, 0.92);
+            color: #ffffff;
+            padding: 10px 20px;
+            border-radius: 999px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s, transform 0.25s;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* =========================================
+           Responsive สำหรับมือถือและแท็บเล็ต
+        ========================================= */
+        @media (max-width: 640px) {
+            .choices-grid {
+                grid-template-columns: 1fr;
+            }
+            .result-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .hud-pill {
+                padding: 5px 10px;
+                font-size: 0.82rem;
+            }
+            .question-card {
+            background: #fffdf7;
+            border: 3px solid #f59e0b;
+            border-radius: var(--radius-lg);
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.34);
+            width: 100%;
+            max-width: 700px;
+            max-height: 92vh;
+            overflow-y: auto;
+            padding: 22px 24px;
+            position: relative;
+            animation: popIn 0.3s ease;
+        }
+
+        .q-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 12px;
+            border-bottom: 2px dashed #fcd34d;
+            padding-bottom: 10px;
+        }
+
+        .q-stage-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #d97706, #92400e);
+            color: #ffffff;
+            padding: 5px 14px;
+            border-radius: 999px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        @media (max-width: 640px) {
+            .choices-grid {
+                grid-template-columns: 1fr;
+            }
+            .result-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .hud-pill {
+                padding: 5px 10px;
+                font-size: 0.8rem;
+            }
+            .hud-title-pill {
+                display: none;
+            }
+            .question-card {
+                padding: 16px;
+            }
+            .card-panel {
+                padding: 20px 16px;
+            }
+        }
+
+        /* =========================================
+           สไตล์สำหรับการพิมพ์รายงานผล (window.print)
+        ========================================= */
+        @media print {
+            body {
+                background: #ffffff !important;
+                overflow: visible !important;
+            }
+            #game-canvas-container, #hud, #bottom-bar, #start-screen, #question-modal, #toast, .result-actions {
+                display: none !important;
+            }
+            #result-screen {
+                position: static !important;
+                background: #ffffff !important;
+                backdrop-filter: none !important;
+                padding: 0 !important;
+                display: block !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+            }
+            .result-card {
+                box-shadow: none !important;
+                border: 1px solid #cbd5e1 !important;
+                max-width: 100% !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- พื้นที่ฉาก 3D Three.js -->
+    <div id="game-canvas-container"></div>
+
+    <!-- ข้อความแจ้งเตือนแบบนุ่มนวล -->
+    <div id="toast"></div>
+
+    <!-- แถบข้อมูลขณะเล่น (HUD) -->
+    <div id="hud" class="hidden">
+        <div class="hud-group">
+            <div class="hud-pill hud-title-pill" title="ชื่อเกม">
+                <span>🗺️</span>
+                <span>ผจญภัยดินแดนสมการเชิงเส้นตัวแปรเดียว</span>
+            </div>
+            <div class="hud-pill" title="ชื่อผู้เล่น">
+                <span>🧭</span>
+                <span id="hud-player">นักสำรวจ</span>
+            </div>
+            <div class="hud-pill" title="ด่านปัจจุบัน">
+                <span>🚩</span>
+                <span>ด่าน <strong id="hud-stage">1</strong>/10</span>
+            </div>
+        </div>
+        <div class="hud-group">
+            <div class="hud-pill" title="คะแนนสะสม">
+                <span>⭐</span>
+                <span>คะแนน <strong id="hud-score">0</strong>/10</span>
+            </div>
+            <div class="hud-pill" title="อัญมณีที่เก็บได้">
+                <span>💎</span>
+                <span id="hud-gems">0</span>
+            </div>
+            <div class="hud-pill" id="hud-timer-pill" title="เวลาที่เหลือ">
+                <span>⏱️</span>
+                <span id="hud-timer">30:00</span>
+            </div>
+            <button class="icon-btn" id="btn-bgm-toggle" title="เปิด/ปิดเพลงประกอบผจญภัย">🎵</button>
+            <button class="icon-btn" id="btn-sound-toggle" title="เปิด/ปิดเสียงเอฟเฟกต์">🔊</button>
+        </div>
+    </div>
+
+    <!-- แถบปุ่มควบคุมด้านล่าง (อยู่นอก Canvas) -->
+    <div id="bottom-bar" class="hidden">
+        <div class="action-row">
+            <button class="game-btn btn-gold" id="btn-open-challenge">
+                <span>⚔️</span> เปิดด่านท้าทาย
+            </button>
+        </div>
+        <div class="camera-tip">💡 ลากหน้าจอเพื่อหมุนมุมกล้อง 3D รอบตัวละครได้</div>
+    </div>
+
+    <!-- หน้าเริ่มต้น (Start Screen) -->
+    <div id="start-screen" class="overlay-screen">
+        <div class="card-panel">
+            <div class="game-badge">🧭 คณิตศาสตร์ ม.1 • ภารกิจล่าสมบัติสมการและแบบรูป</div>
+            <h1 class="game-title">ผจญภัยดินแดน<br>สมการเชิงเส้นตัวแปรเดียว</h1>
+            <p class="game-subtitle">สวมบทบาทนักสำรวจออกเดินทางไขปริศนาสถานการณ์ปัญหาทั้ง 10 ด่าน เพื่อปลดล็อกหีบสมบัติทองคำ!</p>
+
+            <div class="info-pills">
+                <div class="info-pill">
+                    <span class="pill-icon">🗺️</span>
+                    <div class="pill-val">10 ด่าน</div>
+                    <div class="pill-lbl">สถานการณ์ปัญหา</div>
+                </div>
+                <div class="info-pill">
+                    <span class="pill-icon">⏳</span>
+                    <div class="pill-val">30 นาที</div>
+                    <div class="pill-lbl">เวลาทำแบบทดสอบ</div>
+                </div>
+                <div class="info-pill">
+                    <span class="pill-icon">🏆</span>
+                    <div class="pill-val">70% ขึ้นไป</div>
+                    <div class="pill-lbl">ผ่านเกณฑ์ (7/10)</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="input-name">ชื่อ - นามสกุล</label>
+                <input type="text" id="input-name" class="form-input" placeholder="เช่น ด.ช. รักเรียน ใจดี" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="input-class">ชั้น / เลขที่</label>
+                <input type="text" id="input-class" class="form-input" placeholder="เช่น ม.1/1 เลขที่ 12" autocomplete="off">
+            </div>
+
+            <div id="start-error" class="inline-error"></div>
+
+            <button class="game-btn btn-gold" id="btn-start-game" style="width: 100%; font-size: 1.15rem; padding: 14px;">
+                🧭 เริ่มผจญภัย
+            </button>
+        </div>
+    </div>
+
+    <!-- หน้าต่างสถานการณ์ปัญหา (Question Modal) -->
+    <div id="question-modal" class="hidden">
+        <div class="question-card">
+            <div class="q-header">
+                <div class="q-stage-badge" id="q-stage-title">ด่านที่ 1: ป้ายประกาศหน้าหมู่บ้าน</div>
+                <button class="q-close-view" id="btn-hide-modal">👀 ดูฉาก 3D</button>
+            </div>
+
+            <div class="q-text" id="q-text"></div>
+
+            <!-- พื้นที่ภาพประกอบแบบ SVG -->
+            <div class="svg-box" id="q-svg-container"></div>
+
+            <!-- ปุ่มขอคำใบ้ -->
+            <div class="hint-bar">
+                <button class="btn-hint" id="btn-show-hint">💡 ขอคำใบ้ (Hint)</button>
+                <span style="font-size: 0.82rem; color: #64748b;">ค่อย ๆ คิดวิเคราะห์และสังเกตแบบรูปนะ</span>
+            </div>
+            <div class="hint-box" id="q-hint-box"></div>
+
+            <!-- ตัวเลือก 4 ข้อ -->
+            <div class="choices-grid" id="q-choices"></div>
+
+            <!-- กล่องเฉลยและวิธีคิด -->
+            <div class="feedback-box" id="q-feedback">
+                <div class="feedback-title" id="q-feedback-title"></div>
+                <div class="feedback-exp" id="q-feedback-exp"></div>
+            </div>
+
+            <div class="q-footer">
+                <button class="game-btn btn-blue hidden" id="btn-next-stage">
+                    เดินทางสู่ด่านถัดไป ➡️
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- หน้าสรุปผลการผจญภัย (Result Screen) -->
+    <div id="result-screen" class="overlay-screen hidden">
+        <div class="card-panel result-card">
+            <div class="game-badge">🗺️ รายงานผลแบบทดสอบ • ผจญภัยดินแดนสมการเชิงเส้นตัวแปรเดียว</div>
+            <h2 class="game-title" id="res-hero-title">มหาจอมโจรล่าสมบัติแห่งพีชคณิต</h2>
+            <p class="game-subtitle" id="res-student-info">ชื่อ-นามสกุล • ชั้น/เลขที่</p>
+
+            <div id="res-status-badge" class="result-hero-badge status-pass">ผ่านเกณฑ์การประเมิน 🎉</div>
+
+            <div class="result-stats">
+                <div class="stat-box">
+                    <div class="stat-num" id="res-score">0/10</div>
+                    <div class="stat-lbl">คะแนนที่ได้</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num" id="res-percent">0%</div>
+                    <div class="stat-lbl">คิดเป็นร้อยละ</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num" id="res-time">00:00</div>
+                    <div class="stat-lbl">เวลาที่ใช้ไป</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num" id="res-gems">0 💎</div>
+                    <div class="stat-lbl">อัญมณีสะสม</div>
+                </div>
+            </div>
+
+            <div class="summary-table-wrap">
+                <table class="summary-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 48px;">ข้อ</th>
+                            <th>ด่านสถานการณ์ปัญหา</th>
+                            <th>คำตอบของคุณ</th>
+                            <th>เฉลยที่ถูกต้อง</th>
+                            <th style="width: 72px;">ผลลัพธ์</th>
+                        </tr>
+                    </thead>
+                    <tbody id="res-table-body"></tbody>
+                </table>
+            </div>
+
+            <div class="result-actions">
+                <button class="game-btn btn-blue" id="btn-print-result">🖨️ พิมพ์ / บันทึกผลคะแนน</button>
+                <button class="game-btn btn-gold" id="btn-replay-game">🔄 เล่นใหม่อีกครั้ง</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* =========================================================================
+           1. ระบบเพลงประกอบแนวผจญภัยล่าสมบัติ (BGM) และเสียงเอฟเฟกต์ (Web Audio API)
+        ========================================================================= */
+        const SoundFX = (() => {
+            let ctx = null;
+            let sfxMuted = false;
+            let bgmMuted = false;
+            let bgmPlaying = false;
+            let bgmTimer = null;
+            let bgmStep = 0;
+
+            // ทำนองเพลงผจญภัยล่าสมบัติ (คีย์ C Major / A Minor สไตล์คึกคักสนุกสนาน 128 BPM)
+            // 0 หมายถึงเงียบ (Rest), ความถี่เป็นหน่วย Hz
+            const MELODY_NOTES = [
+                // ห้องที่ 1-2: ทำนองหลักออกเดินทางสุดคึกคัก
+                523.25, 0, 659.25, 783.99, 880.00, 783.99, 659.25, 587.33,
+                523.25, 587.33, 659.25, 0, 783.99, 0, 659.25, 0,
+                // ห้องที่ 3-4: จังหวะกระโดดข้ามเกาะล่าสมบัติ
+                880.00, 0, 987.77, 1046.50, 880.00, 783.99, 659.25, 783.99,
+                659.25, 587.33, 523.25, 587.33, 659.25, 0, 587.33, 0,
+                // ห้องที่ 5-6: ท่อนฮุกผจญภัยตื่นเต้น
+                659.25, 783.99, 880.00, 0, 783.99, 659.25, 587.33, 0,
+                659.25, 783.99, 1046.50, 987.77, 880.00, 0, 783.99, 0,
+                // ห้องที่ 7-8: ส่งกลับเข้าลูปอย่างลื่นไหล
+                698.46, 880.00, 783.99, 659.25, 587.33, 659.25, 523.25, 0,
+                587.33, 659.25, 783.99, 587.33, 523.25, 0, 0, 0
+            ];
+
+            // เบสเด้ง ๆ แนวผจญภัย (Root - Fifth Bounce)
+            const BASS_NOTES = [
+                130.81, 0, 196.00, 0, 130.81, 0, 196.00, 0,
+                146.83, 0, 220.00, 0, 196.00, 0, 146.83, 0,
+                174.61, 0, 261.63, 0, 130.81, 0, 196.00, 0,
+                146.83, 0, 196.00, 0, 196.00, 0, 146.83, 0,
+                220.00, 0, 164.81, 0, 196.00, 0, 146.83, 0,
+                174.61, 0, 220.00, 0, 196.00, 0, 246.94, 0,
+                174.61, 0, 130.81, 0, 146.83, 0, 130.81, 0,
+                196.00, 0, 146.83, 0, 130.81, 0, 196.00, 0
+            ];
+
+            function ensureCtx() {
+                if (!ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) ctx = new AudioCtx();
+                }
+                if (ctx && ctx.state === 'suspended') {
+                    ctx.resume();
+                }
+            }
+
+            function playTone(freq, type, duration, vol = 0.12, delay = 0, ignoreSfxMute = false) {
+                if (!ignoreSfxMute && sfxMuted) return;
+                try {
+                    ensureCtx();
+                    if (!ctx) return;
+                    const startAt = ctx.currentTime + delay;
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, startAt);
+                    gain.gain.setValueAtTime(0.001, startAt);
+                    gain.gain.linearRampToValueAtTime(vol, startAt + 0.015);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startAt + duration);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(startAt);
+                    osc.stop(startAt + duration + 0.02);
+                } catch (e) {
+                    // ข้ามหากเบราว์เซอร์บล็อกเสียง
+                }
+            }
+
+            // เสียงกลองคิกเบา ๆ สำหรับ BGM
+            function playSoftKick(startAt) {
+                if (!ctx) return;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(135, startAt);
+                osc.frequency.exponentialRampToValueAtTime(42, startAt + 0.09);
+                gain.gain.setValueAtTime(0.08, startAt);
+                gain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.1);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(startAt);
+                osc.stop(startAt + 0.11);
+            }
+
+            // เสียงเชคเกอร์/ไฮแฮทเบา ๆ สำหรับจังหวะผจญภัย
+            function playLightShaker(startAt, accent = false) {
+                if (!ctx) return;
+                const bufferSize = Math.floor(ctx.sampleRate * 0.035);
+                const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.35));
+                }
+                const noise = ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = ctx.createBiquadFilter();
+                filter.type = 'highpass';
+                filter.frequency.value = 5200;
+
+                const gain = ctx.createGain();
+                gain.gain.setValueAtTime(accent ? 0.032 : 0.018, startAt);
+                gain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.035);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(ctx.destination);
+                noise.start(startAt);
+            }
+
+            // เล่นโน้ตแต่ละจังหวะของเพลง BGM
+            function tickBGM() {
+                if (!bgmPlaying || bgmMuted) return;
+                try {
+                    ensureCtx();
+                    if (!ctx) return;
+                    const now = ctx.currentTime;
+                    const idx = bgmStep % MELODY_NOTES.length;
+
+                    // 1) เมโลดี้หลักแนวขลุ่ย/มาริมบาผจญภัย
+                    const mFreq = MELODY_NOTES[idx];
+                    if (mFreq > 0) {
+                        const osc = ctx.createOscillator();
+                        const filter = ctx.createBiquadFilter();
+                        const gain = ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(mFreq, now);
+                        filter.type = 'lowpass';
+                        filter.frequency.value = 1900;
+                        gain.gain.setValueAtTime(0.001, now);
+                        gain.gain.linearRampToValueAtTime(0.068, now + 0.018);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.21);
+                        osc.connect(filter);
+                        filter.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.22);
+                    }
+
+                    // 2) เบสเด้ง ๆ
+                    const bFreq = BASS_NOTES[idx];
+                    if (bFreq > 0) {
+                        const bOsc = ctx.createOscillator();
+                        const bGain = ctx.createGain();
+                        bOsc.type = 'sine';
+                        bOsc.frequency.setValueAtTime(bFreq, now);
+                        bGain.gain.setValueAtTime(0.001, now);
+                        bGain.gain.linearRampToValueAtTime(0.095, now + 0.012);
+                        bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+                        bOsc.connect(bGain);
+                        bGain.connect(ctx.destination);
+                        bOsc.start(now);
+                        bOsc.stop(now + 0.23);
+                    }
+
+                    // 3) จังหวะกลองเบา ๆ
+                    if (idx % 4 === 0) {
+                        playSoftKick(now);
+                    } else if (idx % 2 === 1) {
+                        playLightShaker(now, idx % 4 === 2);
+                    }
+
+                    bgmStep++;
+                } catch (e) {
+                    // ข้ามหากเกิดข้อผิดพลาดเสียง
+                }
+            }
+
+            return {
+                startBGM() {
+                    ensureCtx();
+                    if (bgmPlaying) return;
+                    bgmPlaying = true;
+                    bgmStep = 0;
+                    tickBGM();
+                    // จังหวะ 128 BPM (โน้ตเขบ็ต 1 ชั้น ≈ 234 ms)
+                    bgmTimer = setInterval(tickBGM, 234);
+                },
+                stopBGM() {
+                    bgmPlaying = false;
+                    clearInterval(bgmTimer);
+                    bgmTimer = null;
+                },
+                toggleBGM() {
+                    bgmMuted = !bgmMuted;
+                    if (!bgmMuted && !bgmPlaying && gameState.started) {
+                        this.startBGM();
+                    }
+                    return bgmMuted;
+                },
+                toggleMute() {
+                    sfxMuted = !sfxMuted;
+                    return sfxMuted;
+                },
+                click() {
+                    playTone(540, 'sine', 0.08, 0.09);
+                },
+                hint() {
+                    playTone(660, 'triangle', 0.12, 0.1);
+                    playTone(880, 'triangle', 0.15, 0.08, 0.08);
+                },
+                step() {
+                    playTone(260, 'sine', 0.07, 0.06);
+                    playTone(340, 'sine', 0.06, 0.04, 0.03);
+                },
+                correct() {
+                    playTone(523.25, 'triangle', 0.14, 0.14, 0);
+                    playTone(659.25, 'triangle', 0.14, 0.14, 0.09);
+                    playTone(783.99, 'triangle', 0.22, 0.14, 0.18);
+                    playTone(1046.5, 'sine', 0.34, 0.13, 0.27);
+                },
+                wrong() {
+                    playTone(300, 'sawtooth', 0.18, 0.08, 0);
+                    playTone(215, 'sawtooth', 0.28, 0.08, 0.14);
+                },
+                victory() {
+                    // เสียงแฟนแฟร์เปิดหีบสมบัติ
+                    const notes = [523.25, 659.25, 783.99, 1046.5, 987.77, 1046.5, 1318.51];
+                    const times = [0, 0.11, 0.22, 0.34, 0.50, 0.62, 0.78];
+                    const durs  = [0.15, 0.15, 0.16, 0.22, 0.14, 0.20, 0.55];
+                    notes.forEach((n, i) => playTone(n, 'triangle', durs[i], 0.14, times[i]));
+                }
+            };
+        })();
+
+        /* =========================================================================
+           2. ฟังก์ชันสร้างภาพประกอบแบบ SVG สำหรับสถานการณ์ปัญหาทั้ง 10 ด่าน
+        ========================================================================= */
+        const SVGAssets = {
+            // ข้อ 1: แม่เหล็กติดกระดาษ 28 แผ่น (แบบรูป 2a + 2)
+            q1: () => `
+                <svg viewBox="0 0 560 135" width="540" height="130" xmlns="http://www.w3.org/2000/svg">
+                    <text x="58" y="18" font-size="12.5" font-weight="600" fill="#78350f" text-anchor="middle">1 แผ่น (4 อัน)</text>
+                    <rect x="28" y="28" width="58" height="78" rx="4" fill="#fed7aa" stroke="#ea580c" stroke-width="2"/>
+                    <circle cx="35" cy="36" r="5" fill="#1e293b"/><circle cx="79" cy="36" r="5" fill="#1e293b"/>
+                    <circle cx="35" cy="98" r="5" fill="#1e293b"/><circle cx="79" cy="98" r="5" fill="#1e293b"/>
+
+                    <text x="190" y="18" font-size="12.5" font-weight="600" fill="#78350f" text-anchor="middle">2 แผ่น (6 อัน)</text>
+                    <rect x="138" y="28" width="58" height="78" rx="4" fill="#fed7aa" stroke="#ea580c" stroke-width="2"/>
+                    <rect x="186" y="28" width="58" height="78" rx="4" fill="#bbf7d0" stroke="#16a34a" stroke-width="2" fill-opacity="0.9"/>
+                    <circle cx="145" cy="36" r="5" fill="#1e293b"/><circle cx="191" cy="36" r="5" fill="#1e293b"/><circle cx="237" cy="36" r="5" fill="#1e293b"/>
+                    <circle cx="145" cy="98" r="5" fill="#1e293b"/><circle cx="191" cy="98" r="5" fill="#1e293b"/><circle cx="237" cy="98" r="5" fill="#1e293b"/>
+
+                    <text x="365" y="18" font-size="12.5" font-weight="600" fill="#78350f" text-anchor="middle">3 แผ่น (8 อัน) ... จนครบ 28 แผ่น</text>
+                    <rect x="285" y="28" width="54" height="78" rx="4" fill="#fed7aa" stroke="#ea580c" stroke-width="2"/>
+                    <rect x="329" y="28" width="54" height="78" rx="4" fill="#bbf7d0" stroke="#16a34a" stroke-width="2" fill-opacity="0.9"/>
+                    <rect x="373" y="28" width="54" height="78" rx="4" fill="#fef08a" stroke="#ca8a04" stroke-width="2" fill-opacity="0.9"/>
+                    <circle cx="292" cy="36" r="4.5" fill="#1e293b"/><circle cx="334" cy="36" r="4.5" fill="#1e293b"/><circle cx="378" cy="36" r="4.5" fill="#1e293b"/><circle cx="420" cy="36" r="4.5" fill="#1e293b"/>
+                    <circle cx="292" cy="98" r="4.5" fill="#1e293b"/><circle cx="334" cy="98" r="4.5" fill="#1e293b"/><circle cx="378" cy="98" r="4.5" fill="#1e293b"/><circle cx="420" cy="98" r="4.5" fill="#1e293b"/>
+                    <text x="452" y="72" font-size="20" font-weight="700" fill="#92400e">...</text>
+                    <rect x="480" y="28" width="54" height="78" rx="4" fill="#fed7aa" stroke="#ea580c" stroke-width="2"/>
+                    <circle cx="487" cy="36" r="4.5" fill="#1e293b"/><circle cx="527" cy="36" r="4.5" fill="#1e293b"/>
+                    <circle cx="487" cy="98" r="4.5" fill="#1e293b"/><circle cx="527" cy="98" r="4.5" fill="#1e293b"/>
+                    <text x="507" y="124" font-size="12" font-weight="700" fill="#b45309" text-anchor="middle">แผ่นที่ 28</text>
+                </svg>
+            `,
+            // ข้อ 2: แม่เหล็กติดกระดาษ 78 แผ่น (Item Card)
+            q2: () => `
+                <svg viewBox="0 0 540 125" width="520" height="120" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="24" y="26" width="54" height="74" rx="4" fill="#fed7aa" stroke="#ea580c" stroke-width="2"/>
+                    <rect x="68" y="26" width="54" height="74" rx="4" fill="#bbf7d0" stroke="#16a34a" stroke-width="2" fill-opacity="0.9"/>
+                    <rect x="112" y="26" width="54" height="74" rx="4" fill="#fef08a" stroke="#ca8a04" stroke-width="2" fill-opacity="0.9"/>
+                    <circle cx="31" cy="34" r="4.5" fill="#1e293b"/><circle cx="73" cy="34" r="4.5" fill="#1e293b"/><circle cx="117" cy="34" r="4.5" fill="#1e293b"/><circle cx="159" cy="34" r="4.5" fill="#1e293b"/>
+                    <circle cx="31" cy="92" r="4.5" fill="#1e293b"/><circle cx="73" cy="92" r="4.5" fill="#1e293b"/><circle cx="117" cy="92" r="4.5" fill="#1e293b"/><circle cx="159" cy="92" r="4.5" fill="#1e293b"/>
+                    <text x="194" y="68" font-size="22" font-weight="700" fill="#92400e">...</text>
+                    <rect x="224" y="26" width="54" height="74" rx="4" fill="#fed7aa" stroke="#ea580c" stroke-width="2"/>
+                    <circle cx="231" cy="34" r="4.5" fill="#1e293b"/><circle cx="271" cy="34" r="4.5" fill="#1e293b"/>
+                    <circle cx="231" cy="92" r="4.5" fill="#1e293b"/><circle cx="271" cy="92" r="4.5" fill="#1e293b"/>
+                    <text x="150" y="116" font-size="13" font-weight="600" fill="#78350f" text-anchor="middle">กระดาษแผนที่ทั้งหมด 78 แผ่น</text>
+
+                    <rect x="308" y="26" width="208" height="74" rx="14" fill="#fef3c7" stroke="#d97706" stroke-width="2.5"/>
+                    <text x="412" y="54" font-size="14" font-weight="600" fill="#92400e" text-anchor="middle">ความสัมพันธ์: 2a + 2</text>
+                    <text x="412" y="80" font-size="16" font-weight="700" fill="#b45309" text-anchor="middle">เมื่อ a = 78 แผ่น → ? อัน</text>
+                </svg>
+            `,
+            // ข้อ 3: ไม้ขีดไฟสร้างรูปสามเหลี่ยมเรียงต่อกัน 25 รูป (2a + 1 จาก Item Card)
+            q3: () => `
+                <svg viewBox="0 0 560 128" width="540" height="122" xmlns="http://www.w3.org/2000/svg">
+                    <g stroke="#b45309" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                        <text x="65" y="18" font-size="12.5" font-weight="600" fill="#78350f" stroke="none" text-anchor="middle">1 รูป (3 ก้าน)</text>
+                        <polygon points="35,96 65,42 95,96" fill="#fef3c7" fill-opacity="0.55"/>
+                        <circle cx="65" cy="42" r="4" fill="#dc2626" stroke="none"/>
+
+                        <text x="200" y="18" font-size="12.5" font-weight="600" fill="#78350f" stroke="none" text-anchor="middle">2 รูป (5 ก้าน)</text>
+                        <polygon points="150,96 180,42 210,96" fill="#fef3c7" fill-opacity="0.55"/>
+                        <polygon points="180,42 240,42 210,96" fill="#fde68a" fill-opacity="0.55"/>
+                        <circle cx="180" cy="42" r="4" fill="#dc2626" stroke="none"/><circle cx="240" cy="42" r="4" fill="#dc2626" stroke="none"/>
+
+                        <text x="390" y="18" font-size="12.5" font-weight="600" fill="#78350f" stroke="none" text-anchor="middle">3 รูป (7 ก้าน) ... จนครบ 25 รูป</text>
+                        <polygon points="315,96 345,42 375,96" fill="#fef3c7" fill-opacity="0.55"/>
+                        <polygon points="345,42 405,42 375,96" fill="#fde68a" fill-opacity="0.55"/>
+                        <polygon points="375,96 405,42 435,96" fill="#fef3c7" fill-opacity="0.55"/>
+                        <circle cx="345" cy="42" r="4" fill="#dc2626" stroke="none"/><circle cx="405" cy="42" r="4" fill="#dc2626" stroke="none"/>
+                    </g>
+                    <text x="485" y="76" font-size="22" font-weight="700" fill="#92400e">... 25 รูป</text>
+                </svg>
+            `,
+            // ข้อ 4: โต๊ะสี่เหลี่ยมจัตุรัสต่อกันเป็นแถวยาว 15 ตัว (2n + 2)
+            q4: () => `
+                <svg viewBox="0 0 560 130" width="540" height="125" xmlns="http://www.w3.org/2000/svg">
+                    <text x="68" y="18" font-size="12.5" font-weight="600" fill="#78350f" text-anchor="middle">1 ตัว (4 คน)</text>
+                    <rect x="48" y="48" width="40" height="40" rx="4" fill="#d97706" stroke="#92400e" stroke-width="2"/>
+                    <circle cx="68" cy="37" r="6" fill="#2563eb"/><circle cx="68" cy="99" r="6" fill="#2563eb"/>
+                    <circle cx="37" cy="68" r="6" fill="#dc2626"/><circle cx="99" cy="68" r="6" fill="#dc2626"/>
+
+                    <text x="205" y="18" font-size="12.5" font-weight="600" fill="#78350f" text-anchor="middle">2 ตัว (6 คน)</text>
+                    <rect x="165" y="48" width="40" height="40" rx="2" fill="#d97706" stroke="#92400e" stroke-width="2"/>
+                    <rect x="205" y="48" width="40" height="40" rx="2" fill="#f59e0b" stroke="#92400e" stroke-width="2"/>
+                    <circle cx="185" cy="37" r="6" fill="#2563eb"/><circle cx="225" cy="37" r="6" fill="#2563eb"/>
+                    <circle cx="185" cy="99" r="6" fill="#2563eb"/><circle cx="225" cy="99" r="6" fill="#2563eb"/>
+                    <circle cx="154" cy="68" r="6" fill="#dc2626"/><circle cx="256" cy="68" r="6" fill="#dc2626"/>
+
+                    <text x="410" y="18" font-size="12.5" font-weight="600" fill="#78350f" text-anchor="middle">ต่อยาว 15 ตัว นั่งได้กี่คน?</text>
+                    <rect x="330" y="48" width="38" height="40" rx="2" fill="#d97706" stroke="#92400e" stroke-width="2"/>
+                    <rect x="368" y="48" width="38" height="40" rx="2" fill="#f59e0b" stroke="#92400e" stroke-width="2"/>
+                    <rect x="406" y="48" width="38" height="40" rx="2" fill="#d97706" stroke="#92400e" stroke-width="2"/>
+                    <circle cx="349" cy="37" r="5.5" fill="#2563eb"/><circle cx="387" cy="37" r="5.5" fill="#2563eb"/><circle cx="425" cy="37" r="5.5" fill="#2563eb"/>
+                    <circle cx="349" cy="99" r="5.5" fill="#2563eb"/><circle cx="387" cy="99" r="5.5" fill="#2563eb"/><circle cx="425" cy="99" r="5.5" fill="#2563eb"/>
+                    <circle cx="319" cy="68" r="5.5" fill="#dc2626"/>
+                    <text x="466" y="74" font-size="18" font-weight="700" fill="#92400e">... 15 ตัว</text>
+                </svg>
+            `,
+            // ข้อ 5: เงินออมนักสำรวจ (20x + 50 = 250)
+            q5: () => `
+                <svg viewBox="0 0 500 115" width="480" height="110" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="20" y="28" width="110" height="58" rx="14" fill="#fef3c7" stroke="#d97706" stroke-width="2.5"/>
+                    <text x="75" y="52" font-size="13" font-weight="600" fill="#92400e" text-anchor="middle">เงินเก็บเดิม</text>
+                    <text x="75" y="74" font-size="17" font-weight="700" fill="#b45309" text-anchor="middle">50 บาท 🪙</text>
+
+                    <text x="155" y="65" font-size="24" font-weight="700" fill="#d97706" text-anchor="middle">+</text>
+
+                    <rect x="180" y="28" width="142" height="58" rx="14" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/>
+                    <text x="251" y="52" font-size="13" font-weight="600" fill="#1e40af" text-anchor="middle">ออมเพิ่มวันละ 20 บาท</text>
+                    <text x="251" y="74" font-size="16" font-weight="700" fill="#1d4ed8" text-anchor="middle">20 × x วัน</text>
+
+                    <text x="348" y="65" font-size="24" font-weight="700" fill="#334155" text-anchor="middle">=</text>
+
+                    <rect x="372" y="28" width="110" height="58" rx="14" fill="#dcfce7" stroke="#16a34a" stroke-width="2.5"/>
+                    <text x="427" y="52" font-size="13" font-weight="600" fill="#166534" text-anchor="middle">เป้าหมายครบ</text>
+                    <text x="427" y="74" font-size="17" font-weight="700" fill="#15803d" text-anchor="middle">250 บาท</text>
+                </svg>
+            `,
+            // ข้อ 6: หีบเหรียญทอง 2 ใบ (x + (x + 12) = 60)
+            q6: () => `
+                <svg viewBox="0 0 500 120" width="480" height="115" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="25" y="34" width="105" height="58" rx="8" fill="#b45309" stroke="#78350f" stroke-width="2.5"/>
+                    <rect x="25" y="34" width="105" height="17" rx="4" fill="#d97706" stroke="#78350f" stroke-width="2"/>
+                    <text x="77" y="24" font-size="12.5" font-weight="600" fill="#78350f" text-anchor="middle">หีบใบที่ 1</text>
+                    <text x="77" y="74" font-size="16" font-weight="700" fill="#fef3c7" text-anchor="middle">x เหรียญ</text>
+
+                    <text x="158" y="70" font-size="24" font-weight="700" fill="#d97706" text-anchor="middle">+</text>
+
+                    <rect x="184" y="34" width="128" height="58" rx="8" fill="#92400e" stroke="#78350f" stroke-width="2.5"/>
+                    <rect x="184" y="34" width="128" height="17" rx="4" fill="#f59e0b" stroke="#78350f" stroke-width="2"/>
+                    <text x="248" y="24" font-size="12.5" font-weight="600" fill="#78350f" text-anchor="middle">หีบใบที่ 2 (มากกว่า 12)</text>
+                    <text x="248" y="74" font-size="16" font-weight="700" fill="#fef3c7" text-anchor="middle">x + 12 เหรียญ</text>
+
+                    <text x="340" y="70" font-size="24" font-weight="700" fill="#334155" text-anchor="middle">=</text>
+
+                    <rect x="366" y="36" width="114" height="54" rx="14" fill="#dcfce7" stroke="#16a34a" stroke-width="2.5"/>
+                    <text x="423" y="69" font-size="17" font-weight="700" fill="#15803d" text-anchor="middle">60 เหรียญ</text>
+                </svg>
+            `,
+            // ข้อ 7: ซื้อเสบียงเดินทาง ขนมปัง 3 แถว + น้ำดื่ม 15 บาท = 90 บาท
+            q7: () => `
+                <svg viewBox="0 0 500 115" width="480" height="110" xmlns="http://www.w3.org/2000/svg">
+                    <g transform="translate(18, 28)">
+                        <rect x="0" y="14" width="44" height="36" rx="10" fill="#f59e0b" stroke="#92400e" stroke-width="2.5"/>
+                        <text x="22" y="37" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">x</text>
+                        <rect x="52" y="14" width="44" height="36" rx="10" fill="#f59e0b" stroke="#92400e" stroke-width="2.5"/>
+                        <text x="74" y="37" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">x</text>
+                        <rect x="104" y="14" width="44" height="36" rx="10" fill="#f59e0b" stroke="#92400e" stroke-width="2.5"/>
+                        <text x="126" y="37" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">x</text>
+                        <text x="74" y="70" font-size="12.5" font-weight="600" fill="#78350f" text-anchor="middle">ขนมปัง 3 แถว (3x)</text>
+                    </g>
+
+                    <text x="194" y="66" font-size="24" font-weight="700" fill="#d97706" text-anchor="middle">+</text>
+
+                    <g transform="translate(220, 22)">
+                        <rect x="18" y="4" width="16" height="10" rx="2" fill="#0284c7"/>
+                        <rect x="6" y="14" width="40" height="48" rx="8" fill="#38bdf8" stroke="#0369a1" stroke-width="2.5"/>
+                        <text x="26" y="44" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">15 ฿</text>
+                        <text x="26" y="77" font-size="12.5" font-weight="600" fill="#0369a1" text-anchor="middle">น้ำดื่ม</text>
+                    </g>
+
+                    <text x="308" y="66" font-size="24" font-weight="700" fill="#334155" text-anchor="middle">=</text>
+
+                    <rect x="342" y="34" width="132" height="52" rx="14" fill="#dcfce7" stroke="#16a34a" stroke-width="2.5"/>
+                    <text x="408" y="66" font-size="18" font-weight="700" fill="#15803d" text-anchor="middle">รวม 90 บาท</text>
+                </svg>
+            `,
+            // ข้อ 8: อายุของคู่หูนักสำรวจ พี่อายุมากกว่าน้อง 5 ปี รวมกัน 27 ปี
+            q8: () => `
+                <svg viewBox="0 0 500 118" width="480" height="112" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="20" y="26" width="115" height="66" rx="16" fill="#e0f2fe" stroke="#0284c7" stroke-width="2.5"/>
+                    <text x="77" y="52" font-size="13" font-weight="600" fill="#0369a1" text-anchor="middle">🧒 อายุน้อง</text>
+                    <text x="77" y="76" font-size="17" font-weight="700" fill="#0c4a6e" text-anchor="middle">x ปี</text>
+
+                    <text x="160" y="66" font-size="24" font-weight="700" fill="#d97706" text-anchor="middle">+</text>
+
+                    <rect x="184" y="26" width="142" height="66" rx="16" fill="#fef3c7" stroke="#d97706" stroke-width="2.5"/>
+                    <text x="255" y="52" font-size="13" font-weight="600" fill="#92400e" text-anchor="middle">🧑 อายุพี่ (มากกว่า 5)</text>
+                    <text x="255" y="76" font-size="17" font-weight="700" fill="#b45309" text-anchor="middle">x + 5 ปี</text>
+
+                    <text x="352" y="66" font-size="24" font-weight="700" fill="#334155" text-anchor="middle">=</text>
+
+                    <rect x="376" y="32" width="106" height="54" rx="14" fill="#dcfce7" stroke="#16a34a" stroke-width="2.5"/>
+                    <text x="429" y="65" font-size="18" font-weight="700" fill="#15803d" text-anchor="middle">27 ปี</text>
+                </svg>
+            `,
+            // ข้อ 9: รั้วค่ายพักแรมรูปสี่เหลี่ยมผืนผ้า ด้านยาวยาวกว่าด้านกว้าง 4 เมตร รอบรูป 32 เมตร
+            q9: () => `
+                <svg viewBox="0 0 500 128" width="480" height="122" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="75" y="32" width="170" height="70" rx="4" fill="#dcfce7" stroke="#78350f" stroke-width="4" stroke-dasharray="10 4"/>
+                    <text x="160" y="22" font-size="13.5" font-weight="700" fill="#92400e" text-anchor="middle">ด้านยาว = x + 4 เมตร</text>
+                    <text x="160" y="120" font-size="13" font-weight="600" fill="#92400e" text-anchor="middle">x + 4 เมตร</text>
+                    <text x="40" y="72" font-size="13.5" font-weight="700" fill="#1d4ed8" text-anchor="middle">กว้าง x</text>
+                    <text x="266" y="72" font-size="13.5" font-weight="700" fill="#1d4ed8" text-anchor="middle">x</text>
+                    <text x="160" y="72" font-size="22" text-anchor="middle">⛺</text>
+
+                    <rect x="305" y="28" width="178" height="74" rx="14" fill="#fef3c7" stroke="#d97706" stroke-width="2.5"/>
+                    <text x="394" y="54" font-size="13.5" font-weight="600" fill="#92400e" text-anchor="middle">ความยาวรอบรูป = 32 ม.</text>
+                    <text x="394" y="80" font-size="15.5" font-weight="700" fill="#b45309" text-anchor="middle">2(x + x + 4) = 32</text>
+                </svg>
+            `,
+            // ข้อ 10: ปลดล็อกหีบสมบัติ (คิดย้อนกลับ 2a + 2 = 42)
+            q10: () => `
+                <svg viewBox="0 0 500 118" width="480" height="112" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="26" y="24" width="48" height="66" rx="4" fill="#fed7aa" stroke="#ea580c" stroke-width="2"/>
+                    <rect x="66" y="24" width="48" height="66" rx="4" fill="#bbf7d0" stroke="#16a34a" stroke-width="2" fill-opacity="0.9"/>
+                    <circle cx="33" cy="32" r="4.5" fill="#1e293b"/><circle cx="71" cy="32" r="4.5" fill="#1e293b"/><circle cx="107" cy="32" r="4.5" fill="#1e293b"/>
+                    <circle cx="33" cy="82" r="4.5" fill="#1e293b"/><circle cx="71" cy="82" r="4.5" fill="#1e293b"/><circle cx="107" cy="82" r="4.5" fill="#1e293b"/>
+                    <text x="142" y="62" font-size="20" font-weight="700" fill="#92400e">...</text>
+                    <rect x="172" y="24" width="48" height="66" rx="4" fill="#fef08a" stroke="#ca8a04" stroke-width="2"/>
+                    <circle cx="179" cy="32" r="4.5" fill="#1e293b"/><circle cx="213" cy="32" r="4.5" fill="#1e293b"/>
+                    <circle cx="179" cy="82" r="4.5" fill="#1e293b"/><circle cx="213" cy="82" r="4.5" fill="#1e293b"/>
+                    <text x="122" y="109" font-size="12.5" font-weight="600" fill="#78350f" text-anchor="middle">กระดาษ a แผ่น (หาค่า a)</text>
+
+                    <rect x="255" y="24" width="224" height="68" rx="14" fill="#fef3c7" stroke="#d97706" stroke-width="2.5"/>
+                    <text x="367" y="50" font-size="14" font-weight="600" fill="#92400e" text-anchor="middle">🔑 รหัสปลดล็อกหีบสมบัติ</text>
+                    <text x="367" y="76" font-size="17" font-weight="700" fill="#b45309" text-anchor="middle">2a + 2 = 42 อัน</text>
+                </svg>
+            `
+        };
+
+        /* =========================================================================
+           3. ข้อมูลโจทย์สถานการณ์ปัญหาทั้ง 10 ข้อ (อ้างอิงแผนการจัดการเรียนรู้ ม.1)
+        ========================================================================= */
+        const QUESTIONS = [
+            {
+                id: 1,
+                stageName: "ด่านบอร์ดแผนที่หน้าหมู่บ้าน",
+                text: "นักสำรวจนำกระดาษแผนที่ซ้อนขอบกันในแนวนอนแล้วติดแม่เหล็กที่มุมบนและล่าง (1 แผ่น ใช้ 4 อัน, 2 แผ่น ใช้ 6 อัน, 3 แผ่น ใช้ 8 อัน) หากมีกระดาษทั้งหมด 28 แผ่น ต้องใช้แม่เหล็กทั้งหมดกี่อัน?",
+                svg: SVGAssets.q1,
+                hint: "สังเกตว่าทุกครั้งที่เพิ่มกระดาษ 1 แผ่น จะใช้แม่เหล็กเพิ่ม 2 อัน เขียนเป็นแบบรูปได้ว่า 2a + 2 (เมื่อ a คือจำนวนกระดาษ)",
+                choices: ["54 อัน", "56 อัน", "58 อัน", "60 อัน"],
+                answerIndex: 2,
+                explanation: "ขั้นที่ 1: หาแบบรูปจำนวนแม่เหล็ก = 2a + 2 (a = จำนวนกระดาษ)<br>ขั้นที่ 2: แทนค่า a = 28 จะได้ (2 × 28) + 2 = 56 + 2 = <strong>58 อัน</strong>"
+            },
+            {
+                id: 2,
+                stageName: "ด่านกำแพงแผนที่ใหญ่",
+                text: "จากการติดกระดาษแผนที่เรียงแนวนอนด้วยแม่เหล็กแบบเดิม (แบบรูป 2a + 2) หากนักสำรวจต้องการติดกระดาษบันทึกการเดินทางทั้งหมด 78 แผ่น จะต้องใช้แม่เหล็กทั้งหมดกี่อัน?",
+                svg: SVGAssets.q2,
+                hint: "ใช้สูตร 2a + 2 เหมือนเดิมเลย ลองนำ 2 คูณกับ 78 แล้วบวกเพิ่มอีก 2 ดูนะ!",
+                choices: ["78 อัน", "80 อัน", "156 อัน", "158 อัน"],
+                answerIndex: 3,
+                explanation: "ขั้นที่ 1: ใช้สูตรจำนวนแม่เหล็ก = 2a + 2<br>ขั้นที่ 2: แทนค่า a = 78 จะได้ (2 × 78) + 2 = 156 + 2 = <strong>158 อัน</strong>"
+            },
+            {
+                id: 3,
+                stageName: "ด่านสะพานไม้ขีดสามเหลี่ยม",
+                text: "นักสำรวจใช้ไม้ขีดไฟสร้างรูปสามเหลี่ยมเรียงต่อกันเป็นสะพาน (1 รูป ใช้ 3 ก้าน, 2 รูป ใช้ 5 ก้าน, 3 รูป ใช้ 7 ก้าน) หากสร้างรูปสามเหลี่ยมเรียงต่อกันทั้งหมด 25 รูป จะต้องใช้ไม้ขีดไฟทั้งหมดกี่ก้าน?",
+                svg: SVGAssets.q3,
+                hint: "รูปแรกใช้ 3 ก้าน แต่รูปถัดไปจะใช้เพิ่มแค่รูปละ 2 ก้าน แบบรูปคือ 2a + 1 (เมื่อ a คือจำนวนรูปสามเหลี่ยม)",
+                choices: ["50 ก้าน", "51 ก้าน", "52 ก้าน", "75 ก้าน"],
+                answerIndex: 1,
+                explanation: "ขั้นที่ 1: แบบรูปจำนวนไม้ขีดไฟ = 2a + 1 (a = จำนวนสามเหลี่ยม)<br>ขั้นที่ 2: แทนค่า a = 25 จะได้ (2 × 25) + 1 = 50 + 1 = <strong>51 ก้าน</strong>"
+            },
+            {
+                id: 4,
+                stageName: "ด่านโต๊ะอาหารโรงเตี๊ยม",
+                text: "ในโรงเตี๊ยมมีโต๊ะสี่เหลี่ยมจัตุรัสวางต่อกันเป็นแถวยาว โดยนั่งได้ด้านละ 1 คน (1 ตัว นั่งได้ 4 คน, 2 ตัว นั่งได้ 6 คน, 3 ตัว นั่งได้ 8 คน) หากนำโต๊ะมาต่อกัน 15 ตัว จะนั่งได้ทั้งหมดกี่คน?",
+                svg: SVGAssets.q4,
+                hint: "โต๊ะแต่ละตัวมีที่นั่งด้านบน-ล่างรวม 2 ที่ (2n) และมีหัวโต๊ะ-ท้ายโต๊ะอีก 2 ที่ รวมเป็น 2n + 2",
+                choices: ["30 คน", "32 คน", "34 คน", "60 คน"],
+                answerIndex: 1,
+                explanation: "ขั้นที่ 1: แบบรูปจำนวนที่นั่ง = 2n + 2 (n = จำนวนโต๊ะ)<br>ขั้นที่ 2: แทนค่า n = 15 จะได้ (2 × 15) + 2 = 30 + 2 = <strong>32 คน</strong>"
+            },
+            {
+                id: 5,
+                stageName: "ด่านกระปุกออมสินนักสำรวจ",
+                text: "นักสำรวจมีเงินเก็บอยู่แล้ว 50 บาท และตั้งใจออมเงินเพิ่มวันละ 20 บาท เพื่อซื้อเข็มทิศทองคำราคา 250 บาท ต้องออมเงินกี่วันจึงจะมีเงินครบ 250 บาทพอดี?",
+                svg: SVGAssets.q5,
+                hint: "ให้ x แทนจำนวนวันที่ออมเพิ่ม จะได้สมการ 20x + 50 = 250 ลองลบ 50 ออกก่อนแล้วหารด้วย 20 นะ",
+                choices: ["8 วัน", "10 วัน", "12 วัน", "15 วัน"],
+                answerIndex: 1,
+                explanation: "ขั้นที่ 1: ตั้งสมการ 20x + 50 = 250<br>ขั้นที่ 2: นำ 50 ลบทั้งสองข้างจะได้ 20x = 200<br>ขั้นที่ 3: นำ 20 หารทั้งสองข้างจะได้ x = 200 ÷ 20 = <strong>10 วัน</strong>"
+            },
+            {
+                id: 6,
+                stageName: "ด่านหีบเหรียญทองคู่แฝด",
+                text: "นักสำรวจพบหีบเหรียญทอง 2 ใบ โดยหีบใบที่สองมีเหรียญทองมากกว่าหีบใบแรกอยู่ 12 เหรียญ เมื่อนับรวมกันทั้งสองหีบมีทั้งหมด 60 เหรียญ อยากทราบว่าหีบใบแรกมีเหรียญทองกี่เหรียญ?",
+                svg: SVGAssets.q6,
+                hint: "ให้หีบใบแรกมี x เหรียญ หีบใบที่สองจะมี x + 12 เหรียญ ตั้งสมการได้เป็น x + (x + 12) = 60",
+                choices: ["20 เหรียญ", "24 เหรียญ", "30 เหรียญ", "36 เหรียญ"],
+                answerIndex: 1,
+                explanation: "ขั้นที่ 1: ตั้งสมการ x + (x + 12) = 60 → 2x + 12 = 60<br>ขั้นที่ 2: นำ 12 ลบทั้งสองข้างจะได้ 2x = 48<br>ขั้นที่ 3: นำ 2 หารทั้งสองข้างจะได้ x = 48 ÷ 2 = <strong>24 เหรียญ</strong>"
+            },
+            {
+                id: 7,
+                stageName: "ด่านร้านเสบียงเดินทาง",
+                text: "ก่อนออกเดินป่า นักสำรวจซื้อขนมปัง 3 แถว ราคาเท่ากัน และซื้อน้ำดื่ม 1 ขวด ราคา 15 บาท จ่ายเงินรวมทั้งหมด 90 บาท ขนมปังราคาแถวละกี่บาท?",
+                svg: SVGAssets.q7,
+                hint: "ให้ x แทนราคาขนมปัง 1 แถว จะได้สมการ 3x + 15 = 90 ลองหักค่าน้ำดื่ม 15 บาทออกก่อนแล้วหารด้วย 3",
+                choices: ["20 บาท", "25 บาท", "30 บาท", "35 บาท"],
+                answerIndex: 1,
+                explanation: "ขั้นที่ 1: ตั้งสมการ 3x + 15 = 90<br>ขั้นที่ 2: นำ 15 ลบทั้งสองข้างจะได้ 3x = 75<br>ขั้นที่ 3: นำ 3 หารทั้งสองข้างจะได้ x = 75 ÷ 3 = <strong>25 บาท</strong>"
+            },
+            {
+                id: 8,
+                stageName: "ด่านปริศนาคู่หูนักสำรวจ",
+                text: "สองพี่น้องคู่หูนักสำรวจเล่าว่า \"พี่อายุมากกว่าน้อง 5 ปี และถ้านำอายุของทั้งสองคนมารวมกันจะได้ 27 ปี\" อยากทราบว่าคนน้องมีอายุกี่ปี?",
+                svg: SVGAssets.q8,
+                hint: "ให้คนน้องอายุ x ปี คนพี่จะมีอายุ x + 5 ปี เขียนสมการได้ว่า x + (x + 5) = 27",
+                choices: ["10 ปี", "11 ปี", "12 ปี", "16 ปี"],
+                answerIndex: 1,
+                explanation: "ขั้นที่ 1: ตั้งสมการ x + (x + 5) = 27 → 2x + 5 = 27<br>ขั้นที่ 2: นำ 5 ลบทั้งสองข้างจะได้ 2x = 22<br>ขั้นที่ 3: นำ 2 หารทั้งสองข้างจะได้ x = 22 ÷ 2 = <strong>11 ปี</strong>"
+            },
+            {
+                id: 9,
+                stageName: "ด่านรั้วค่ายพักแรม",
+                text: "นักสำรวจล้อมรั้วค่ายพักแรมเป็นรูปสี่เหลี่ยมผืนผ้า โดยด้านยาวยาวกว่าด้านกว้าง 4 เมตร ถ้าวัดความยาวรอบรูปของรั้วได้ทั้งหมด 32 เมตร ด้านกว้างของค่ายพักแรมยาวกี่เมตร?",
+                svg: SVGAssets.q9,
+                hint: "ให้ด้านกว้างยาว x เมตร ด้านยาวจะเป็น x + 4 เมตร ความยาวรอบรูปคือ 2(กว้าง + ยาว) = 2(x + x + 4) = 32",
+                choices: ["5 เมตร", "6 เมตร", "8 เมตร", "10 เมตร"],
+                answerIndex: 1,
+                explanation: "ขั้นที่ 1: ตั้งสมการ 2(x + x + 4) = 32 → 2(2x + 4) = 32<br>ขั้นที่ 2: นำ 2 หารทั้งสองข้างจะได้ 2x + 4 = 16<br>ขั้นที่ 3: นำ 4 ลบทั้งสองข้างจะได้ 2x = 12 → x = <strong>6 เมตร</strong>"
+            },
+            {
+                id: 10,
+                stageName: "ด่านปลดล็อกหีบสมบัติทองคำ",
+                text: "ด่านสุดท้าย! รหัสเปิดหีบสมบัติมาจากการติดกระดาษด้วยแม่เหล็กแบบเดิม (สูตร 2a + 2 เมื่อ a คือจำนวนกระดาษ) หากมีแม่เหล็กทั้งหมด 42 อัน จะสามารถติดกระดาษได้กี่แผ่น?",
+                svg: SVGAssets.q10,
+                hint: "ตั้งสมการคิดย้อนกลับ 2a + 2 = 42 แล้วแก้สมการหาค่า a (ลบออก 2 ก่อน แล้วหารด้วย 2)",
+                choices: ["19 แผ่น", "20 แผ่น", "21 แผ่น", "22 แผ่น"],
+                answerIndex: 1,
+                explanation: "ขั้นที่ 1: ตั้งสมการ 2a + 2 = 42<br>ขั้นที่ 2: นำ 2 ลบทั้งสองข้างจะได้ 2a = 40<br>ขั้นที่ 3: นำ 2 หารทั้งสองข้างจะได้ a = 40 ÷ 2 = <strong>20 แผ่น</strong>"
+            }
+        ];
+
+        const CHOICE_LABELS = ["ก", "ข", "ค", "ง"];
+        const TOTAL_TIME_SECONDS = 30 * 60; // 30 นาที
+
+        /* =========================================================================
+           4. สถานะของเกม (Game State)
+        ========================================================================= */
+        const gameState = {
+            started: false,
+            finished: false,
+            playerName: "",
+            playerClass: "",
+            currentIndex: 0, // 0 ถึง 9
+            score: 0,
+            gems: 0,
+            timeLeft: TOTAL_TIME_SECONDS,
+            timerInterval: null,
+            answers: [], // เก็บ { qId, chosenIndex, isCorrect }
+            answeredCurrent: false,
+            isWalking: false
+        };
+
+        /* =========================================================================
+           5. ระบบโลก 3D แนวผจญภัย Low-Poly (Three.js)
+        ========================================================================= */
+        let scene, camera, renderer, clock;
+        let playerGroup, leftLeg, rightLeg, leftArm, rightArm;
+        let stations = []; // เก็บข้อมูลแท่นหินและคริสตัลทั้ง 10 ด่าน
+        let treasureChestLid = null;
+        let clouds = [];
+        let waterMesh = null;
+        let particles = []; // อนุภาคฉลองเมื่อตอบถูก
+        let pathCurve = null;
+
+        // พิกัด 10 ด่านบนเกาะลอยน้ำคดเคี้ยว
+        const WAYPOINTS = [
+            new THREE.Vector3(-18, 0.5, 16),
+            new THREE.Vector3(-10, 0.5, 14),
+            new THREE.Vector3(-3,  0.5, 10),
+            new THREE.Vector3(6,   0.5, 12),
+            new THREE.Vector3(14,  0.5, 7),
+            new THREE.Vector3(15,  0.5, -2),
+            new THREE.Vector3(7,   0.5, -8),
+            new THREE.Vector3(-3,  0.5, -6),
+            new THREE.Vector3(-12, 0.5, -11),
+            new THREE.Vector3(-3,  0.5, -18) // ด่าน 10 วิหารหีบสมบัติ
+        ];
+
+        // ตัวแปรควบคุมการเดินของตัวละคร
+        let walkStartPos = new THREE.Vector3();
+        let walkTargetPos = new THREE.Vector3();
+        let walkProgress = 1;
+        let jumpCelebrationTimer = 0;
+
+        // ตัวแปรควบคุมมุมกล้องแบบ Orbit เบา ๆ ด้วยเมาส์และสัมผัส
+        let camYaw = 0.25;
+        let camPitch = 0.48;
+        let isDraggingCam = false;
+        let prevPointer = { x: 0, y: 0 };
+        let currentCamLookAt = new THREE.Vector3(-18, 1.5, 16);
+
+        function initThreeJS() {
+            const container = document.getElementById('game-canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+            scene.fog = new THREE.FogExp2(0x93d5f5, 0.011);
+
+            camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 250);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            clock = new THREE.Clock();
+
+            // แสงสว่างสดใสสไตล์ผจญภัย
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x4ade80, 0.78);
+            hemiLight.position.set(0, 50, 0);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xfffbeb, 0.95);
+            dirLight.position.set(25, 42, 22);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 5;
+            dirLight.shadow.camera.far = 110;
+            const d = 32;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+
+            buildWorld();
+            buildPathAndStations();
+            buildPlayerCharacter();
+            setupCameraControls(container);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        // สร้างภูมิประเทศเกาะลอยน้ำ น้ำ ท้องฟ้า ต้นไม้ ภูเขา ก้อนเมฆ
+        function buildWorld() {
+            // ผืนน้ำด้านล่าง
+            const waterGeo = new THREE.PlaneGeometry(240, 240, 24, 24);
+            const waterMat = new THREE.MeshStandardMaterial({
+                color: 0x38bdf8,
+                roughness: 0.25,
+                metalness: 0.1,
+                flatShading: true,
+                transparent: true,
+                opacity: 0.88
+            });
+            waterMesh = new THREE.Mesh(waterGeo, waterMat);
+            waterMesh.rotation.x = -Math.PI / 2;
+            waterMesh.position.y = -4.5;
+            scene.add(waterMesh);
+
+            // เกาะหลักสไตล์ Low-Poly (ทุ่งหญ้าด้านบน + ฐานดินหินด้านล่าง)
+            const islandTopGeo = new THREE.CylinderGeometry(28, 25, 2, 16);
+            const islandTopMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, flatShading: true, roughness: 0.85 });
+            const islandTop = new THREE.Mesh(islandTopGeo, islandTopMat);
+            islandTop.position.set(0, -0.5, 0);
+            islandTop.receiveShadow = true;
+            scene.add(islandTop);
+
+            const islandBaseGeo = new THREE.ConeGeometry(25, 11, 14);
+            const islandBaseMat = new THREE.MeshStandardMaterial({ color: 0x92400e, flatShading: true, roughness: 0.95 });
+            const islandBase = new THREE.Mesh(islandBaseGeo, islandBaseMat);
+            islandBase.rotation.x = Math.PI;
+            islandBase.position.set(0, -7, 0);
+            scene.add(islandBase);
+
+            // เกาะเล็กประดับรอบ ๆ
+            const miniIslands = [
+                { x: -38, y: -1.5, z: -12, r: 7 },
+                { x: 36, y: -2, z: 14, r: 8 },
+                { x: 32, y: -1, z: -26, r: 6 },
+                { x: -34, y: -2.2, z: 24, r: 5.5 }
+            ];
+            miniIslands.forEach(mi => {
+                const top = new THREE.Mesh(
+                    new THREE.CylinderGeometry(mi.r, mi.r * 0.85, 1.4, 8),
+                    islandTopMat
+                );
+                top.position.set(mi.x, mi.y, mi.z);
+                scene.add(top);
+
+                const bot = new THREE.Mesh(
+                    new THREE.ConeGeometry(mi.r * 0.85, mi.r * 1.1, 8),
+                    islandBaseMat
+                );
+                bot.rotation.x = Math.PI;
+                bot.position.set(mi.x, mi.y - mi.r * 0.55 - 0.5, mi.z);
+                scene.add(bot);
+            });
+
+            // ภูเขา Low-Poly ประดับขอบเกาะ
+            const mountainCoords = [
+                { x: -22, z: -2, s: 5.5, h: 10 },
+                { x: -20, z: -18, s: 6, h: 12 },
+                { x: 18, z: -16, s: 6.5, h: 13 },
+                { x: 22, z: 14, s: 5, h: 9 },
+                { x: 10, z: -22, s: 5, h: 10 }
+            ];
+            const rockMat = new THREE.MeshStandardMaterial({ color: 0x64748b, flatShading: true });
+            const snowMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, flatShading: true });
+
+            mountainCoords.forEach(m => {
+                const mt = new THREE.Mesh(new THREE.ConeGeometry(m.s, m.h, 6), rockMat);
+                mt.position.set(m.x, m.h / 2 + 0.2, m.z);
+                mt.castShadow = true;
+                mt.receiveShadow = true;
+                scene.add(mt);
+
+                const cap = new THREE.Mesh(new THREE.ConeGeometry(m.s * 0.36, m.h * 0.35, 6), snowMat);
+                cap.position.set(m.x, m.h * 0.85 + 0.2, m.z);
+                scene.add(cap);
+            });
+
+            // ต้นไม้ Low-Poly กระจายรอบเส้นทาง (หลีกเลี่ยงจุดด่าน)
+            const treePositions = [
+                [-16, 8], [-11, 4], [-5, 17], [2, 18], [12, 16],
+                [21, 3], [19, -7], [12, -14], [1, -13], [-10, -2],
+                [-18, -8], [-15, -17], [4, -22], [-10, -21], [5, 3],
+                [-2, 1], [10, 1], [-22, 10], [22, -2], [-6, -12]
+            ];
+            treePositions.forEach(([tx, tz]) => {
+                const tree = createLowPolyTree(0.8 + Math.random() * 0.55);
+                tree.position.set(tx, 0.5, tz);
+                scene.add(tree);
+            });
+
+            // ดอกไม้และพุ่มไม้เล็ก ๆ เพิ่มความสดใส
+            const flowerColors = [0xf43f5e, 0xfbbf24, 0xa855f7, 0xec4899, 0xffffff];
+            for (let i = 0; i < 45; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 5 + Math.random() * 19;
+                const fx = Math.cos(angle) * radius;
+                const fz = Math.sin(angle) * radius;
+                const fMat = new THREE.MeshStandardMaterial({
+                    color: flowerColors[i % flowerColors.length],
+                    flatShading: true
+                });
+                const flower = new THREE.Mesh(new THREE.DodecahedronGeometry(0.28, 0), fMat);
+                flower.position.set(fx, 0.65, fz);
+                scene.add(flower);
+            }
+
+            // ก้อนเมฆลอยบนท้องฟ้า
+            const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 0.9 });
+            for (let i = 0; i < 12; i++) {
+                const cloudGroup = new THREE.Group();
+                const puffs = 3 + Math.floor(Math.random() * 2);
+                for (let p = 0; p < puffs; p++) {
+                    const puff = new THREE.Mesh(
+                        new THREE.DodecahedronGeometry(1.6 + Math.random() * 1.1, 0),
+                        cloudMat
+                    );
+                    puff.position.set((p - 1.2) * 1.8, Math.random() * 0.6, (Math.random() - 0.5) * 1.2);
+                    cloudGroup.add(puff);
+                }
+                cloudGroup.position.set(
+                    (Math.random() - 0.5) * 90,
+                    14 + Math.random() * 10,
+                    (Math.random() - 0.5) * 80
+                );
+                cloudGroup.userData = { speed: 0.4 + Math.random() * 0.5 };
+                scene.add(cloudGroup);
+                clouds.push(cloudGroup);
+            }
+        }
+
+        function createLowPolyTree(scale = 1) {
+            const group = new THREE.Group();
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, flatShading: true });
+            const leafColors = [0x16a34a, 0x15803d, 0x22c55e];
+            const leafMat = new THREE.MeshStandardMaterial({
+                color: leafColors[Math.floor(Math.random() * leafColors.length)],
+                flatShading: true
+            });
+
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.38, 1.5, 6), trunkMat);
+            trunk.position.y = 0.75;
+            trunk.castShadow = true;
+            group.add(trunk);
+
+            const cone1 = new THREE.Mesh(new THREE.ConeGeometry(1.4, 2.2, 6), leafMat);
+            cone1.position.y = 2.2;
+            cone1.castShadow = true;
+            group.add(cone1);
+
+            const cone2 = new THREE.Mesh(new THREE.ConeGeometry(1.0, 1.8, 6), leafMat);
+            cone2.position.y = 3.4;
+            cone2.castShadow = true;
+            group.add(cone2);
+
+            group.scale.setScalar(scale);
+            return group;
+        }
+
+        // สร้างเส้นทางหินคดเคี้ยว เสาคริสตัล 10 ด่าน และหีบสมบัติที่ด่าน 10
+        function buildPathAndStations() {
+            pathCurve = new THREE.CatmullRomCurve3(WAYPOINTS);
+            const stonePoints = pathCurve.getPoints(72);
+            const stoneMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, flatShading: true, roughness: 0.9 });
+
+            stonePoints.forEach((pt, idx) => {
+                const stone = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.75 + (idx % 2) * 0.12, 0.85, 0.25, 7),
+                    stoneMat
+                );
+                stone.position.set(pt.x, 0.52, pt.z);
+                stone.rotation.y = idx * 0.6;
+                stone.receiveShadow = true;
+                scene.add(stone);
+            });
+
+            // สร้างแท่นหินและคริสตัลประจำทั้ง 10 ด่าน
+            WAYPOINTS.forEach((wp, index) => {
+                const stationGroup = new THREE.Group();
+                stationGroup.position.set(wp.x, 0.5, wp.z);
+
+                // แท่นหินวงกลม
+                const base = new THREE.Mesh(
+                    new THREE.CylinderGeometry(1.5, 1.8, 0.45, 8),
+                    new THREE.MeshStandardMaterial({ color: 0x94a3b8, flatShading: true })
+                );
+                base.position.y = 0.22;
+                base.receiveShadow = true;
+                base.castShadow = true;
+                stationGroup.add(base);
+
+                // วงแหวนเรืองแสงบนแท่น
+                const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide });
+                const ring = new THREE.Mesh(new THREE.RingGeometry(1.05, 1.32, 16), ringMat);
+                ring.rotation.x = -Math.PI / 2;
+                ring.position.y = 0.47;
+                stationGroup.add(ring);
+
+                // เสาคริสตัลข้างแท่น
+                const crystalMat = new THREE.MeshStandardMaterial({
+                    color: 0x38bdf8,
+                    emissive: 0x0284c7,
+                    emissiveIntensity: 0.55,
+                    flatShading: true,
+                    roughness: 0.2
+                });
+                const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.55, 0), crystalMat);
+                crystal.position.set(1.55, 1.9, -0.6);
+                crystal.castShadow = true;
+                stationGroup.add(crystal);
+
+                // เสาหินรองคริสตัล
+                const pillar = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.28, 0.36, 1.1, 6),
+                    new THREE.MeshStandardMaterial({ color: 0x64748b, flatShading: true })
+                );
+                pillar.position.set(1.55, 0.55, -0.6);
+                pillar.castShadow = true;
+                stationGroup.add(pillar);
+
+                // ด่านที่ 10: สร้างหีบสมบัติขนาดใหญ่พร้อมซุ้มประตูวิหาร
+                if (index === WAYPOINTS.length - 1) {
+                    buildTreasureChest(stationGroup);
+                }
+
+                scene.add(stationGroup);
+                stations.push({
+                    group: stationGroup,
+                    crystal,
+                    crystalMat,
+                    ringMat,
+                    status: 'locked' // locked, current, correct, wrong
+                });
+            });
+        }
+
+        function buildTreasureChest(parentGroup) {
+            const chestGroup = new THREE.Group();
+            chestGroup.position.set(0, 0.45, -2.3);
+
+            const woodMat = new THREE.MeshStandardMaterial({ color: 0x92400e, flatShading: true });
+            const goldMat = new THREE.MeshStandardMaterial({
+                color: 0xfbbf24,
+                emissive: 0xd97706,
+                emissiveIntensity: 0.35,
+                metalness: 0.5,
+                roughness: 0.25
+            });
+
+            // ตัวหีบ
+            const chestBody = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.2, 1.5), woodMat);
+            chestBody.position.y = 0.6;
+            chestBody.castShadow = true;
+            chestGroup.add(chestBody);
+
+            // ขอบทอง
+            const band = new THREE.Mesh(new THREE.BoxGeometry(2.48, 0.24, 1.58), goldMat);
+            band.position.y = 1.05;
+            chestGroup.add(band);
+
+            // แม่กุญแจทอง
+            const lock = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.45, 0.2), goldMat);
+            lock.position.set(0, 0.9, 0.8);
+            chestGroup.add(lock);
+
+            // ฝาหีบ (เปิดได้เมื่อชนะด่าน 10)
+            treasureChestLid = new THREE.Group();
+            treasureChestLid.position.set(0, 1.2, -0.75);
+            const lidMesh = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.55, 1.5), woodMat);
+            lidMesh.position.set(0, 0.27, 0.75);
+            lidMesh.castShadow = true;
+            treasureChestLid.add(lidMesh);
+
+            const lidGold = new THREE.Mesh(new THREE.BoxGeometry(2.46, 0.16, 1.56), goldMat);
+            lidGold.position.set(0, 0.52, 0.75);
+            treasureChestLid.add(lidGold);
+            chestGroup.add(treasureChestLid);
+
+            // เสาวิหารสองข้าง
+            const colMat = new THREE.MeshStandardMaterial({ color: 0xfef3c7, flatShading: true });
+            [-2.4, 2.4].forEach(cx => {
+                const col = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.42, 4.2, 6), colMat);
+                col.position.set(cx, 2.1, -2.5);
+                col.castShadow = true;
+                parentGroup.add(col);
+            });
+            const archTop = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.6, 0.9), colMat);
+            archTop.position.set(0, 4.3, -2.5);
+            archTop.castShadow = true;
+            parentGroup.add(archTop);
+
+            parentGroup.add(chestGroup);
+        }
+
+        // สร้างตัวละครนักผจญภัย 3D (ตัว, หัว, หมวกนักสำรวจ, กระเป๋าเป้, แขน, ขา)
+        function buildPlayerCharacter() {
+            playerGroup = new THREE.Group();
+
+            const tunicMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, flatShading: true });
+            const pantsMat = new THREE.MeshStandardMaterial({ color: 0x334155, flatShading: true });
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xfde68a, flatShading: true });
+            const hatMat = new THREE.MeshStandardMaterial({ color: 0xb45309, flatShading: true });
+            const packMat = new THREE.MeshStandardMaterial({ color: 0xd97706, flatShading: true });
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+
+            // ขาซ้าย-ขวา
+            leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.65, 0.28), pantsMat);
+            leftLeg.position.set(-0.2, 0.33, 0);
+            leftLeg.castShadow = true;
+            playerGroup.add(leftLeg);
+
+            rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.65, 0.28), pantsMat);
+            rightLeg.position.set(0.2, 0.33, 0);
+            rightLeg.castShadow = true;
+            playerGroup.add(rightLeg);
+
+            // ลำตัว
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.85, 0.45), tunicMat);
+            body.position.y = 1.05;
+            body.castShadow = true;
+            playerGroup.add(body);
+
+            // กระเป๋าเป้นักผจญภัยด้านหลัง
+            const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.68, 0.34), packMat);
+            backpack.position.set(0, 1.08, -0.35);
+            backpack.castShadow = true;
+            playerGroup.add(backpack);
+
+            // แขนซ้าย-ขวา
+            leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.68, 0.22), tunicMat);
+            leftArm.position.set(-0.52, 1.08, 0);
+            leftArm.castShadow = true;
+            playerGroup.add(leftArm);
+
+            rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.68, 0.22), tunicMat);
+            rightArm.position.set(0.52, 1.08, 0);
+            rightArm.castShadow = true;
+            playerGroup.add(rightArm);
+
+            // ศีรษะ
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.62), skinMat);
+            head.position.y = 1.82;
+            head.castShadow = true;
+            playerGroup.add(head);
+
+            // ดวงตา
+            const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.05), eyeMat);
+            leftEye.position.set(-0.14, 1.85, 0.31);
+            playerGroup.add(leftEye);
+
+            const rightEye = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.05), eyeMat);
+            rightEye.position.set(0.14, 1.85, 0.31);
+            playerGroup.add(rightEye);
+
+            // หมวกนักสำรวจ (ปีกหมวก + ตัวหมวก)
+            const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.65, 0.1, 10), hatMat);
+            hatBrim.position.y = 2.14;
+            hatBrim.castShadow = true;
+            playerGroup.add(hatBrim);
+
+            const hatTop = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.42, 0.36, 8), hatMat);
+            hatTop.position.y = 2.34;
+            hatTop.castShadow = true;
+            playerGroup.add(hatTop);
+
+            // วางตัวละครที่จุดเริ่มต้น (ด่าน 1)
+            playerGroup.position.copy(WAYPOINTS[0]);
+            playerGroup.position.y = 0.95;
+            scene.add(playerGroup);
+        }
+
+        // สร้างอนุภาคฉลอง (Particles) เมื่อตอบถูกหรือเปิดหีบสมบัติ
+        function spawnCelebrationParticles(origin, count = 42, goldOnly = false) {
+            const colors = goldOnly
+                ? [0xfbbf24, 0xfde047, 0xf59e0b, 0xfffbeb]
+                : [0xfbbf24, 0x34d399, 0x38bdf8, 0xf43f5e, 0xa855f7];
+            for (let i = 0; i < count; i++) {
+                const mat = new THREE.MeshBasicMaterial({ color: colors[i % colors.length] });
+                const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), mat);
+                mesh.position.set(origin.x, origin.y + 1.8, origin.z);
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2.5 + Math.random() * 4.5;
+                mesh.userData = {
+                    vx: Math.cos(angle) * speed,
+                    vy: 4.5 + Math.random() * 5.0,
+                    vz: Math.sin(angle) * speed,
+                    life: 1.4 + Math.random() * 0.6
+                };
+                scene.add(mesh);
+                particles.push(mesh);
+            }
+        }
+
+        // อัปเดตสีคริสตัลแต่ละด่านตามสถานะ
+        function updateStationVisuals() {
+            stations.forEach((st, idx) => {
+                if (st.status === 'correct') {
+                    st.crystalMat.color.setHex(0x10b981);
+                    st.crystalMat.emissive.setHex(0x059669);
+                    st.ringMat.color.setHex(0x10b981);
+                } else if (st.status === 'wrong') {
+                    st.crystalMat.color.setHex(0xef4444);
+                    st.crystalMat.emissive.setHex(0xb91c1c);
+                    st.ringMat.color.setHex(0xef4444);
+                } else if (idx === gameState.currentIndex) {
+                    st.crystalMat.color.setHex(0xfbbf24);
+                    st.crystalMat.emissive.setHex(0xd97706);
+                    st.ringMat.color.setHex(0xfbbf24);
+                } else {
+                    st.crystalMat.color.setHex(0x38bdf8);
+                    st.crystalMat.emissive.setHex(0x0284c7);
+                    st.ringMat.color.setHex(0x38bdf8);
+                }
+            });
+        }
+
+        // ควบคุมมุมกล้องด้วยเมาส์และทัชสกรีน
+        function setupCameraControls(el) {
+            el.addEventListener('mousedown', (e) => {
+                isDraggingCam = true;
+                prevPointer = { x: e.clientX, y: e.clientY };
+            });
+            window.addEventListener('mouseup', () => { isDraggingCam = false; });
+            window.addEventListener('mousemove', (e) => {
+                if (!isDraggingCam) return;
+                const dx = e.clientX - prevPointer.x;
+                const dy = e.clientY - prevPointer.y;
+                camYaw -= dx * 0.006;
+                camPitch = Math.max(0.22, Math.min(1.05, camPitch + dy * 0.004));
+                prevPointer = { x: e.clientX, y: e.clientY };
+            });
+
+            el.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    isDraggingCam = true;
+                    prevPointer = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                }
+            }, { passive: true });
+            window.addEventListener('touchend', () => { isDraggingCam = false; });
+            window.addEventListener('touchmove', (e) => {
+                if (!isDraggingCam || e.touches.length !== 1) return;
+                const dx = e.touches[0].clientX - prevPointer.x;
+                const dy = e.touches[0].clientY - prevPointer.y;
+                camYaw -= dx * 0.007;
+                camPitch = Math.max(0.22, Math.min(1.05, camPitch + dy * 0.005));
+                prevPointer = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }, { passive: true });
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('game-canvas-container');
+            if (!camera || !renderer) return;
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // ลูปแอนิเมชันหลักของ Three.js
+        let stepSoundCooldown = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.05);
+            const elapsed = clock.getElapsedTime();
+
+            // หมุนคริสตัลทุกด่านให้ลอยขึ้นลง
+            stations.forEach((st, idx) => {
+                st.crystal.rotation.y += dt * 1.4;
+                st.crystal.position.y = 1.9 + Math.sin(elapsed * 2.5 + idx) * 0.22;
+            });
+
+            // ก้อนเมฆลอยช้า ๆ
+            clouds.forEach(c => {
+                c.position.x += c.userData.speed * dt;
+                if (c.position.x > 52) c.position.x = -52;
+            });
+
+            // คลื่นน้ำเบา ๆ
+            if (waterMesh) {
+                waterMesh.position.y = -4.5 + Math.sin(elapsed * 1.2) * 0.15;
+            }
+
+            // แอนิเมชันตัวละครเดินไปยังด่านถัดไป
+            if (gameState.isWalking && walkProgress < 1) {
+                walkProgress += dt * 0.72; // ความเร็วการเดิน
+                if (walkProgress >= 1) {
+                    walkProgress = 1;
+                    gameState.isWalking = false;
+                    playerGroup.position.set(walkTargetPos.x, 0.95, walkTargetPos.z);
+                    leftLeg.rotation.x = 0;
+                    rightLeg.rotation.x = 0;
+                    leftArm.rotation.x = 0;
+                    rightArm.rotation.x = 0;
+                    // ถึงด่านแล้ว เปิดหน้าต่างสถานการณ์ปัญหาอัตโนมัติ
+                    setTimeout(() => {
+                        if (!gameState.finished) openQuestionModal();
+                    }, 350);
+                } else {
+                    // เคลื่อนที่แบบ Smooth + กระโดดเล็กน้อยตามจังหวะก้าว
+                    const smoothT = walkProgress * walkProgress * (3 - 2 * walkProgress);
+                    const curX = THREE.MathUtils.lerp(walkStartPos.x, walkTargetPos.x, smoothT);
+                    const curZ = THREE.MathUtils.lerp(walkStartPos.z, walkTargetPos.z, smoothT);
+                    const hop = Math.abs(Math.sin(walkProgress * Math.PI * 5)) * 0.45;
+                    playerGroup.position.set(curX, 0.95 + hop, curZ);
+
+                    // หันหน้าไปทางด่านเป้าหมาย
+                    const dx = walkTargetPos.x - walkStartPos.x;
+                    const dz = walkTargetPos.z - walkStartPos.z;
+                    playerGroup.rotation.y = Math.atan2(dx, dz);
+
+                    // แกว่งแขนขา
+                    const swing = Math.sin(elapsed * 14) * 0.65;
+                    leftLeg.rotation.x = swing;
+                    rightLeg.rotation.x = -swing;
+                    leftArm.rotation.x = -swing * 0.8;
+                    rightArm.rotation.x = swing * 0.8;
+
+                    stepSoundCooldown -= dt;
+                    if (stepSoundCooldown <= 0) {
+                        SoundFX.step();
+                        stepSoundCooldown = 0.26;
+                    }
+                }
+            } else {
+                // แอนิเมชันยืนหายใจ หรือกระโดดดีใจเมื่อตอบถูก
+                if (jumpCelebrationTimer > 0) {
+                    jumpCelebrationTimer -= dt;
+                    playerGroup.position.y = 0.95 + Math.abs(Math.sin(jumpCelebrationTimer * 10)) * 0.85;
+                    playerGroup.rotation.y += dt * 5;
+                } else {
+                    playerGroup.position.y = 0.95 + Math.sin(elapsed * 3) * 0.04;
+                }
+            }
+
+            // เปิดฝาหีบสมบัติเมื่อจบเกม
+            if (gameState.finished && treasureChestLid) {
+                treasureChestLid.rotation.x = THREE.MathUtils.lerp(treasureChestLid.rotation.x, -1.25, dt * 3);
+            } else if (treasureChestLid) {
+                treasureChestLid.rotation.x = THREE.MathUtils.lerp(treasureChestLid.rotation.x, 0, dt * 5);
+            }
+
+            // อัปเดตอนุภาคฉลอง (Particles)
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.userData.life -= dt;
+                if (p.userData.life <= 0) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                } else {
+                    p.userData.vy -= 12 * dt; // แรงโน้มถ่วง
+                    p.position.x += p.userData.vx * dt;
+                    p.position.y += p.userData.vy * dt;
+                    p.position.z += p.userData.vz * dt;
+                    p.rotation.x += dt * 4;
+                    p.rotation.y += dt * 4;
+                    const s = Math.max(0.01, p.userData.life * 0.8);
+                    p.scale.setScalar(s);
+                }
+            }
+
+            // กล้องติดตามตัวละครแบบมุมมองบุคคลที่สามอย่างนุ่มนวล
+            if (!gameState.started) {
+                // หมุนชมเกาะเบา ๆ ในหน้าเริ่มต้น
+                const idleAngle = elapsed * 0.14;
+                camera.position.set(Math.sin(idleAngle) * 34, 18, Math.cos(idleAngle) * 34);
+                camera.lookAt(0, 1, 0);
+            } else {
+                const dist = 12.5;
+                const desiredLookAt = new THREE.Vector3(
+                    playerGroup.position.x,
+                    playerGroup.position.y + 1.4,
+                    playerGroup.position.z
+                );
+                currentCamLookAt.lerp(desiredLookAt, dt * 4.5);
+
+                const desiredCamPos = new THREE.Vector3(
+                    currentCamLookAt.x + Math.sin(camYaw) * Math.cos(camPitch) * dist,
+                    currentCamLookAt.y + Math.sin(camPitch) * dist,
+                    currentCamLookAt.z + Math.cos(camYaw) * Math.cos(camPitch) * dist
+                );
+                camera.position.lerp(desiredCamPos, dt * 4.5);
+                camera.lookAt(currentCamLookAt);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        /* =========================================================================
+           6. ตรรกะเกม ระบบจับเวลา UI และหน้าสรุปผล
+        ========================================================================= */
+        const elStartScreen = document.getElementById('start-screen');
+        const elHud = document.getElementById('hud');
+        const elBottomBar = document.getElementById('bottom-bar');
+        const elQuestionModal = document.getElementById('question-modal');
+        const elResultScreen = document.getElementById('result-screen');
+        const elToast = document.getElementById('toast');
+
+        let toastTimer = null;
+        function showToast(msg) {
+            elToast.textContent = msg;
+            elToast.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => elToast.classList.remove('show'), 2600);
+        }
+
+        function formatTime(sec) {
+            const m = Math.floor(sec / 60);
+            const s = sec % 60;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        function updateHUD() {
+            document.getElementById('hud-player').textContent = `${gameState.playerName} (${gameState.playerClass})`;
+            document.getElementById('hud-stage').textContent = Math.min(gameState.currentIndex + 1, QUESTIONS.length);
+            document.getElementById('hud-score').textContent = gameState.score;
+            document.getElementById('hud-gems').textContent = gameState.gems;
+            document.getElementById('hud-timer').textContent = formatTime(gameState.timeLeft);
+
+            const timerPill = document.getElementById('hud-timer-pill');
+            if (gameState.timeLeft <= 300) {
+                timerPill.classList.add('timer-warn');
+            } else {
+                timerPill.classList.remove('timer-warn');
+            }
+        }
+
+        function startTimer() {
+            clearInterval(gameState.timerInterval);
+            gameState.timerInterval = setInterval(() => {
+                if (gameState.finished) return;
+                gameState.timeLeft--;
+                updateHUD();
+                if (gameState.timeLeft <= 0) {
+                    clearInterval(gameState.timerInterval);
+                    showToast("⏰ หมดเวลาแล้ว! ระบบกำลังสรุปผลคะแนน...");
+                    finishGame();
+                }
+            }, 1000);
+        }
+
+        // เริ่มเกมใหม่
+        function startGame() {
+            const nameInput = document.getElementById('input-name').value.trim();
+            const classInput = document.getElementById('input-class').value.trim();
+            const errEl = document.getElementById('start-error');
+
+            if (!nameInput || !classInput) {
+                errEl.textContent = "กรุณากรอกชื่อ-นามสกุล และชั้น/เลขที่ ก่อนเริ่มการผจญภัยนะครับ";
+                SoundFX.wrong();
+                return;
+            }
+            errEl.textContent = "";
+            SoundFX.click();
+            SoundFX.startBGM(); // เริ่มเล่นเพลงประกอบแนวผจญภัยล่าสมบัติอัตโนมัติ
+
+            // รีเซ็ตสถานะเกมทั้งหมด
+            gameState.started = true;
+            gameState.finished = false;
+            gameState.playerName = nameInput;
+            gameState.playerClass = classInput;
+            gameState.currentIndex = 0;
+            gameState.score = 0;
+            gameState.gems = 0;
+            gameState.timeLeft = TOTAL_TIME_SECONDS;
+            gameState.answers = [];
+            gameState.answeredCurrent = false;
+            gameState.isWalking = false;
+
+            stations.forEach(st => st.status = 'locked');
+            updateStationVisuals();
+
+            // รีเซ็ตตำแหน่งตัวละครกลับด่าน 1
+            playerGroup.position.set(WAYPOINTS[0].x, 0.95, WAYPOINTS[0].z);
+            const nextWp = WAYPOINTS[1];
+            playerGroup.rotation.y = Math.atan2(nextWp.x - WAYPOINTS[0].x, nextWp.z - WAYPOINTS[0].z);
+            currentCamLookAt.set(WAYPOINTS[0].x, 2.3, WAYPOINTS[0].z);
+
+            elStartScreen.classList.add('hidden');
+            elResultScreen.classList.add('hidden');
+            elHud.classList.remove('hidden');
+            elBottomBar.classList.remove('hidden');
+
+            updateHUD();
+            startTimer();
+            showToast("🧭 ยินดีต้อนรับสู่ดินแดนสมการเชิงเส้นตัวแปรเดียว! ด่านที่ 1 พร้อมแล้ว");
+
+            setTimeout(() => {
+                openQuestionModal();
+            }, 850);
+        }
+
+        // เปิดหน้าต่างสถานการณ์ปัญหาของด่านปัจจุบัน
+        function openQuestionModal() {
+            if (gameState.finished || gameState.isWalking) return;
+            const q = QUESTIONS[gameState.currentIndex];
+            if (!q) return;
+
+            document.getElementById('q-stage-title').textContent = `ด่านที่ ${q.id}/10: ${q.stageName}`;
+            document.getElementById('q-text').textContent = q.text;
+            document.getElementById('q-svg-container').innerHTML = q.svg();
+
+            // รีเซ็ตกล่องคำใบ้
+            const hintBox = document.getElementById('q-hint-box');
+            hintBox.textContent = `💡 คำใบ้: ${q.hint}`;
+            hintBox.classList.remove('show');
+
+            // สร้างปุ่มตัวเลือก 4 ข้อ
+            const choicesWrap = document.getElementById('q-choices');
+            choicesWrap.innerHTML = "";
+            q.choices.forEach((choiceText, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'choice-btn';
+                btn.innerHTML = `<span class="choice-prefix">${CHOICE_LABELS[idx]}</span><span>${choiceText}</span>`;
+                btn.addEventListener('click', () => handleSelectAnswer(idx));
+                choicesWrap.appendChild(btn);
+            });
+
+            // รีเซ็ตกล่องเฉลยและปุ่มด่านถัดไป
+            const feedbackBox = document.getElementById('q-feedback');
+            feedbackBox.className = 'feedback-box';
+            const nextBtn = document.getElementById('btn-next-stage');
+            nextBtn.classList.add('hidden');
+
+            // หากเคยตอบข้อนี้ไปแล้ว (กรณีปิดดูฉาก 3D แล้วเปิดใหม่) ให้คงสถานะเฉลยไว้
+            if (gameState.answeredCurrent) {
+                const prevAns = gameState.answers[gameState.currentIndex];
+                if (prevAns) renderAnswerResult(prevAns.chosenIndex, q);
+            }
+
+            elQuestionModal.classList.remove('hidden');
+        }
+
+        // เมื่อผู้เล่นกดเลือกคำตอบ
+        function handleSelectAnswer(chosenIndex) {
+            if (gameState.answeredCurrent) return;
+            gameState.answeredCurrent = true;
+
+            const q = QUESTIONS[gameState.currentIndex];
+            const isCorrect = (chosenIndex === q.answerIndex);
+
+            gameState.answers[gameState.currentIndex] = {
+                qId: q.id,
+                stageName: q.stageName,
+                chosenIndex,
+                isCorrect
+            };
+
+            if (isCorrect) {
+                gameState.score++;
+                gameState.gems += 100;
+                stations[gameState.currentIndex].status = 'correct';
+                SoundFX.correct();
+                jumpCelebrationTimer = 1.1;
+                spawnCelebrationParticles(playerGroup.position, 45);
+            } else {
+                stations[gameState.currentIndex].status = 'wrong';
+                SoundFX.wrong();
+            }
+
+            updateStationVisuals();
+            updateHUD();
+            renderAnswerResult(chosenIndex, q);
+        }
+
+        function renderAnswerResult(chosenIndex, q) {
+            const buttons = document.querySelectorAll('#q-choices .choice-btn');
+            buttons.forEach((btn, idx) => {
+                btn.disabled = true;
+                if (idx === q.answerIndex) {
+                    btn.classList.add('correct');
+                } else if (idx === chosenIndex && chosenIndex !== q.answerIndex) {
+                    btn.classList.add('wrong');
+                }
+            });
+
+            const isCorrect = (chosenIndex === q.answerIndex);
+            const feedbackBox = document.getElementById('q-feedback');
+            const feedbackTitle = document.getElementById('q-feedback-title');
+            const feedbackExp = document.getElementById('q-feedback-exp');
+
+            feedbackBox.className = `feedback-box show ${isCorrect ? 'is-correct' : 'is-wrong'}`;
+            feedbackTitle.textContent = isCorrect
+                ? "🎉 ยอดเยี่ยมมาก! ตอบถูกต้อง (+1 คะแนน, +100 💎)"
+                : `💡 ยังไม่ถูกนะ คำตอบที่ถูกต้องคือ ${CHOICE_LABELS[q.answerIndex]}. ${q.choices[q.answerIndex]}`;
+            feedbackExp.innerHTML = `<strong>เฉลยและวิธีคิด:</strong> ${q.explanation}`;
+
+            const nextBtn = document.getElementById('btn-next-stage');
+            nextBtn.classList.remove('hidden');
+            if (gameState.currentIndex === QUESTIONS.length - 1) {
+                nextBtn.textContent = "🏆 เปิดหีบสมบัติและสรุปผล";
+            } else {
+                nextBtn.textContent = "เดินทางสู่ด่านถัดไป ➡️";
+            }
+        }
+
+        // เดินทางไปยังด่านถัดไปในโลก 3D
+        function advanceToNextStage() {
+            SoundFX.click();
+            elQuestionModal.classList.add('hidden');
+
+            if (gameState.currentIndex >= QUESTIONS.length - 1) {
+                // ด่านสุดท้าย: ฉลองเปิดหีบสมบัติพร้อมประกายทองแล้วสรุปผล
+                spawnCelebrationParticles(WAYPOINTS[9], 95, true);
+                SoundFX.victory();
+                finishGame();
+                return;
+            }
+
+            walkStartPos.copy(WAYPOINTS[gameState.currentIndex]);
+            gameState.currentIndex++;
+            gameState.answeredCurrent = false;
+            walkTargetPos.copy(WAYPOINTS[gameState.currentIndex]);
+            walkProgress = 0;
+            gameState.isWalking = true;
+
+            updateStationVisuals();
+            updateHUD();
+            showToast(`🚶 กำลังเดินทางสู่ด่านที่ ${gameState.currentIndex + 1}: ${QUESTIONS[gameState.currentIndex].stageName}`);
+        }
+
+        // สรุปผลการผจญภัยทั้งหมด
+        function finishGame() {
+            gameState.finished = true;
+            clearInterval(gameState.timerInterval);
+            elQuestionModal.classList.add('hidden');
+            elBottomBar.classList.add('hidden');
+
+            const percent = Math.round((gameState.score / QUESTIONS.length) * 100);
+            const passed = percent >= 70;
+            const timeUsed = TOTAL_TIME_SECONDS - gameState.timeLeft;
+
+            // กำหนดฉายานักล่าสมบัติตามคะแนน
+            let heroTitle = "นักสำรวจฝึกหัดแห่งดินแดนสมการ 🌱";
+            if (gameState.score === 10) heroTitle = "ตำนานนักล่าสมบัติผู้พิชิตสมการ 👑";
+            else if (gameState.score >= 8) heroTitle = "ยอดนักสำรวจผู้ไขปริศนาทองคำ 🧭";
+            else if (gameState.score >= 7) heroTitle = "นักล่าสมบัติผู้ผ่านการทดสอบ 🏅";
+
+            document.getElementById('res-hero-title').textContent = heroTitle;
+            document.getElementById('res-student-info').textContent = `ผู้กล้า: ${gameState.playerName} • ชั้น/เลขที่: ${gameState.playerClass}`;
+
+            const statusBadge = document.getElementById('res-status-badge');
+            if (passed) {
+                statusBadge.textContent = "ผ่านเกณฑ์การประเมิน (ตั้งแต่ 70% ขึ้นไป) 🎉";
+                statusBadge.className = "result-hero-badge status-pass";
+            } else {
+                statusBadge.textContent = "ลองฝึกฝนอีกครั้งนะ (เกณฑ์ผ่าน 70%) 💪";
+                statusBadge.className = "result-hero-badge status-retry";
+            }
+
+            document.getElementById('res-score').textContent = `${gameState.score}/${QUESTIONS.length}`;
+            document.getElementById('res-percent').textContent = `${percent}%`;
+            document.getElementById('res-time').textContent = `${formatTime(timeUsed)} นาที`;
+            document.getElementById('res-gems').textContent = `${gameState.gems} 💎`;
+
+            // สร้างตารางสรุปคำตอบทั้ง 10 ข้อ
+            const tbody = document.getElementById('res-table-body');
+            tbody.innerHTML = "";
+            QUESTIONS.forEach((q, idx) => {
+                const ans = gameState.answers[idx];
+                const userChoiceText = ans
+                    ? `${CHOICE_LABELS[ans.chosenIndex]}. ${q.choices[ans.chosenIndex]}`
+                    : "ไม่ได้ตอบ";
+                const correctChoiceText = `${CHOICE_LABELS[q.answerIndex]}. ${q.choices[q.answerIndex]}`;
+                const isOk = ans && ans.isCorrect;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${q.id}</strong></td>
+                    <td>${q.stageName}</td>
+                    <td>${userChoiceText}</td>
+                    <td><strong>${correctChoiceText}</strong></td>
+                    <td><span class="${isOk ? 'tag-ok' : 'tag-no'}">${isOk ? '✓ ถูก' : '✗ ผิด'}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // หน่วงเวลาเล็กน้อยให้เห็นหีบสมบัติเปิดและอนุภาคฉลองก่อนแสดงหน้าสรุป
+            setTimeout(() => {
+                elResultScreen.classList.remove('hidden');
+            }, 900);
+        }
+
+        /* =========================================================================
+           7. เชื่อมต่อเหตุการณ์ปุ่มกดทั้งหมด (Event Listeners)
+        ========================================================================= */
+        document.getElementById('btn-start-game').addEventListener('click', startGame);
+
+        document.getElementById('btn-open-challenge').addEventListener('click', () => {
+            SoundFX.click();
+            if (gameState.isWalking) {
+                showToast("⏳ รอตัวละครเดินถึงด่านก่อนนะครับ");
+                return;
+            }
+            openQuestionModal();
+        });
+
+        document.getElementById('btn-hide-modal').addEventListener('click', () => {
+            SoundFX.click();
+            elQuestionModal.classList.add('hidden');
+            showToast("👀 กดปุ่ม 'เปิดด่านท้าทาย' ด้านล่างเมื่อพร้อมตอบคำถาม");
+        });
+
+        document.getElementById('btn-show-hint').addEventListener('click', () => {
+        document.getElementById('btn-bgm-toggle').addEventListener('click', (e) => {
+            const isBgmMuted = SoundFX.toggleBGM();
+            e.currentTarget.textContent = isBgmMuted ? "🔇" : "🎵";
+            showToast(isBgmMuted ? "ปิดเพลงประกอบแล้ว" : "เปิดเพลงประกอบผจญภัยแล้ว 🎵");
+        });
+
+        document.getElementById('btn-sound-toggle').addEventListener('click', (e) => {
+            const isMuted = SoundFX.toggleMute();
+            e.currentTarget.textContent = isMuted ? "🔇" : "🔊";
+            showToast(isMuted ? "ปิดเสียงเอฟเฟกต์แล้ว" : "เปิดเสียงเอฟเฟกต์แล้ว");
+        });
+
+        document.getElementById('btn-print-result').addEventListener('click', () => {
+            SoundFX.click();
+            window.print();
+        });
+
+        document.getElementById('btn-replay-game').addEventListener('click', () => {
+            SoundFX.click();
+            SoundFX.stopBGM();
+            elResultScreen.classList.add('hidden');
+            elHud.classList.add('hidden');
+            elStartScreen.classList.remove('hidden');
+            gameState.started = false;
+            gameState.finished = false;
+        });
+
+        // เริ่มต้นฉาก 3D และแอนิเมชันเมื่อหน้าเว็บโหลดเสร็จสมบูรณ์
+        window.onload = function () {
+            try {
+                initThreeJS();
+                animate();
+            } catch (err) {
+                console.error("Three.js Initialization Error:", err);
+                showToast("ไม่สามารถโหลดฉาก 3D ได้ กรุณาลองรีเฟรชหน้าเว็บ");
+            }
+        };
+    </script>
+</body>
+</html>
